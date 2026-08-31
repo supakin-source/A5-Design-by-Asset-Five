@@ -6,8 +6,12 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const { username, password } = (await req.json()) as { username?: string; password?: string };
 
-  const expectedUser = process.env.DASHBOARD_USERNAME;
-  const expectedPassword = process.env.DASHBOARD_PASSWORD;
+  // Trimmed because a stray space or newline pasted into the hosting
+  // provider's env-var field would otherwise lock the team out with no way to
+  // tell why. Only the configured side is trimmed — what the user typed is
+  // compared as entered.
+  const expectedUser = process.env.DASHBOARD_USERNAME?.trim();
+  const expectedPassword = process.env.DASHBOARD_PASSWORD?.trim();
   if (!expectedUser || !expectedPassword) {
     return NextResponse.json({ error: "dashboard credentials are not configured" }, { status: 500 });
   }
