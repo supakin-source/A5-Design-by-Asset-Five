@@ -42,6 +42,12 @@
 ### 1) เตรียม LINE Official Account
 
 1. สร้าง Provider และ **Messaging API channel** ที่ https://developers.line.biz/console/
+
+   > ⚠️ **สำคัญถ้าคิดจะใช้ LIFF ในอนาคต**: ให้สร้าง channel ทุกตัวของโปรเจกต์นี้ไว้ใต้
+   > **Provider เดียวกัน** เพราะ LIFF ต้องอยู่ใต้ LINE Login channel แยกอีกตัว และจะ
+   > เชื่อมกับ LINE OA (Linked LINE Official Account) ได้เฉพาะเมื่ออยู่ Provider เดียวกัน
+   > — ถ้าสร้างคนละ Provider ภายหลังย้ายไม่ได้ ต้องสร้างใหม่ทั้งชุด
+
 2. ในแท็บ **Messaging API** กด Issue สำหรับ `Channel access token` (long-lived)
 3. ในแท็บ **Basic settings** คัดลอก `Channel secret`
 4. ปิด **Auto-reply messages** และ **Greeting messages** ของ LINE OA
@@ -129,6 +135,18 @@ npm run dev                 # http://localhost:3000
 - รูปภาพที่ลูกค้าส่งมาจะไม่ถูกเก็บเป็นไฟล์ในระบบ เก็บเพียงคำอธิบายสรุปที่จำเป็นต่อ
   การส่งต่องาน
 - ผู้เข้าถึง dashboard ต้องรักษาความลับข้อมูลลูกค้าตามนโยบายบริษัทและ PDPA
+
+## ทางขยายในอนาคต (Flex Message / Quick Reply / LIFF)
+
+- **Quick Reply และ Flex Message** ใช้ Messaging API channel เดิมได้เลย ไม่ต้องสร้าง
+  channel เพิ่ม — ชนิดข้อมูลใน [`src/lib/line.ts`](src/lib/line.ts) (`LineMessage`,
+  `LineQuickReply`, `LineAction`) รองรับไว้แล้ว ส่งได้ผ่าน `replyMessage`/`pushMessage`
+  เดิมโดยไม่ต้องแก้ตัวส่ง เหมาะกับปุ่มเลือกประเภทงาน/ช่วงงบประมาณ ซึ่งได้ข้อมูลแม่นยำ
+  กว่าและช่วยประหยัดโควตา AI
+- **Rich Menu** (เมนูค้างล่างหน้าแชท) ตั้งได้จาก LINE Manager โดยไม่ต้องเขียนโค้ด
+- **LIFF** (เว็บฟอร์มในแอป LINE) ต้องสร้าง **LINE Login channel** เพิ่มใต้ Provider
+  เดียวกัน แล้วลงทะเบียน LIFF app — เหมาะกับฟอร์มกรอกรายละเอียดโครงการแบบมีโครงสร้าง
+  หรือจองนัดดูหน้างาน
 
 ## สิ่งที่ยังไม่ได้ทำ (ข้อเสนอถัดไป)
 

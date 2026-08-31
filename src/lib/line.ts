@@ -22,7 +22,39 @@ function authHeaders() {
   };
 }
 
-export async function replyMessage(replyToken: string, messages: Array<{ type: "text"; text: string }>) {
+// Message shapes accepted by the reply/push endpoints. Text is all the bot
+// sends today; Flex and quick replies are here so richer messages (service
+// cards, "เลือกประเภทงาน" buttons) can be added without touching the senders.
+export type LineAction =
+  | { type: "message"; label: string; text: string }
+  | { type: "postback"; label?: string; data: string; displayText?: string }
+  | { type: "uri"; label?: string; uri: string }
+  | {
+      type: "datetimepicker";
+      label?: string;
+      data: string;
+      mode: "date" | "time" | "datetime";
+      initial?: string;
+      min?: string;
+      max?: string;
+    }
+  | { type: "camera"; label: string }
+  | { type: "cameraRoll"; label: string }
+  | { type: "location"; label: string };
+
+export interface LineQuickReply {
+  items: Array<{ type: "action"; imageUrl?: string; action: LineAction }>;
+}
+
+// The Flex container schema is large and evolves with the LINE API; it is kept
+// loose here on purpose and validated by LINE itself on send.
+export type FlexContainer = Record<string, unknown>;
+
+export type LineMessage =
+  | { type: "text"; text: string; quickReply?: LineQuickReply }
+  | { type: "flex"; altText: string; contents: FlexContainer; quickReply?: LineQuickReply };
+
+export async function replyMessage(replyToken: string, messages: LineMessage[]) {
   const res = await fetch(`${LINE_API}/message/reply`, {
     method: "POST",
     headers: authHeaders(),
@@ -33,7 +65,7 @@ export async function replyMessage(replyToken: string, messages: Array<{ type: "
   }
 }
 
-export async function pushMessage(to: string, messages: Array<{ type: "text"; text: string }>) {
+export async function pushMessage(to: string, messages: LineMessage[]) {
   const res = await fetch(`${LINE_API}/message/push`, {
     method: "POST",
     headers: authHeaders(),
