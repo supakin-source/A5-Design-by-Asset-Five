@@ -99,8 +99,13 @@ npm run dev                 # http://localhost:3000
 ### 6) Deploy บน Vercel และตั้ง webhook
 
 1. Import repo นี้เข้า Vercel และใส่ environment variables ทั้งหมดข้างต้น
-2. Deploy แล้วรัน migration กับฐานข้อมูล production (`npx prisma migrate deploy`
-   โดยตั้ง `DATABASE_URL` ของ production)
+2. กด Deploy — สคริปต์ `build` จะรัน `prisma migrate deploy` ให้อัตโนมัติ จึงสร้าง
+   ตารางในฐานข้อมูลเองโดยไม่ต้องรันคำสั่งในเครื่อง (ถ้าต้องการรันมือ ใช้
+   `npx prisma migrate deploy` โดยตั้ง `DATABASE_URL` ของ production)
+
+   > หมายเหตุ: preview deployment ของ Vercel ก็จะรัน migration กับฐานข้อมูลที่ตั้งไว้
+   > ใน env เดียวกัน ถ้าในอนาคตต้องการแยกฐานข้อมูล production/preview ให้ตั้งค่า
+   > `DATABASE_URL` แยกตาม environment ใน Vercel
 3. กลับไปที่การตั้งค่า LINE (ขั้นตอนที่ 1) นำ URL
    `https://<โดเมนของคุณ>/api/line/webhook` ใส่ในช่อง **Webhook URL / ลิงก์ Webhook**
    → บันทึก → เปิด **Use webhook** ให้เป็น ON → กด **Verify**
