@@ -7,7 +7,9 @@ export interface ChatTurn {
 }
 
 export interface StructuredChatReply {
-  reply: string;
+  // One entry per chat bubble. People send a thought as a couple of short
+  // messages rather than one paragraph, so the bot answers the same way.
+  replies: string[];
   extractedFields: {
     name?: string;
     phone?: string;
@@ -28,7 +30,11 @@ export interface StructuredChatReply {
 const responseSchema: ResponseSchema = {
   type: SchemaType.OBJECT,
   properties: {
-    reply: { type: SchemaType.STRING, description: "ข้อความตอบกลับลูกค้า" },
+    replies: {
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
+      description: "ข้อความตอบกลับลูกค้า แบ่งเป็น 1-3 ฟองแชท ฟองละ 1-2 ประโยคสั้น",
+    },
     extractedFields: {
       type: SchemaType.OBJECT,
       properties: {
@@ -52,8 +58,39 @@ const responseSchema: ResponseSchema = {
     escalationReason: { type: SchemaType.STRING, nullable: true },
     imageDescription: { type: SchemaType.STRING, nullable: true },
   },
-  required: ["reply", "extractedFields", "needsHuman"],
+  required: ["replies", "extractedFields", "needsHuman"],
 };
+
+export const MAX_BUBBLES = 3;
+const MAX_BUBBLE_CHARS = 220;
+
+// Guards against the model ignoring the bubble limits: drops empties, splits an
+// over-long bubble at a sentence boundary rather than mid-word, and never sends
+// more bubbles than a person would.
+export function normalizeBubbles(replies: unknown): string[] {
+  const raw = Array.isArray(replies) ? replies : [replies];
+  const bubbles: string[] = [];
+
+  for (const entry of raw) {
+    const text = typeof entry === "string" ? entry.trim() : "";
+    if (!text) continue;
+    if (text.length <= MAX_BUBBLE_CHARS) {
+      bubbles.push(text);
+      continue;
+    }
+    let rest = text;
+    while (rest.length > MAX_BUBBLE_CHARS) {
+      const window = rest.slice(0, MAX_BUBBLE_CHARS);
+      const cut = Math.max(window.lastIndexOf(" "), window.lastIndexOf("\n"));
+      const at = cut > MAX_BUBBLE_CHARS / 2 ? cut : MAX_BUBBLE_CHARS;
+      bubbles.push(rest.slice(0, at).trim());
+      rest = rest.slice(at).trim();
+    }
+    if (rest) bubbles.push(rest);
+  }
+
+  return bubbles.slice(0, MAX_BUBBLES);
+}
 
 let client: GoogleGenerativeAI | null = null;
 
@@ -97,12 +134,17 @@ export async function generateChatReply(params: {
       },
     });
     const result = await model.generateContent({ contents });
-    return JSON.parse(result.response.text()) as StructuredChatReply;
+    const parsed = JSON.parse(result.response.text()) as StructuredChatReply;
+    const replies = normalizeBubbles(parsed.replies);
+    if (replies.length === 0) throw new Error("model returned no reply text");
+    return { ...parsed, replies };
   } catch (err) {
     console.error("[gemini] falling back to human handoff", err);
     return {
-      reply:
-        "ขออภัยค่ะ ระบบผู้ช่วยอัตโนมัติไม่พร้อมใช้งานชั่วคราว ดิฉันได้แจ้งทีมงานให้ติดต่อกลับโดยเร็วที่สุดแล้วค่ะ 🙏",
+      replies: [
+        "ขออภัยค่ะ ระบบผู้ช่วยอัตโนมัติไม่พร้อมใช้งานชั่วคราว",
+        "Ady แจ้งทีมงานให้ติดต่อกลับโดยเร็วที่สุดแล้วนะคะ 🙏",
+      ],
       extractedFields: {},
       needsHuman: true,
       escalationReason: "ai_unavailable",

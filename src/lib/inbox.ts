@@ -140,9 +140,13 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
     });
   }
 
-  await prisma.message.create({
-    data: { conversationId: conversation.id, role: MessageRole.BOT, content: ai.reply },
-  });
+  // One transcript row per bubble, so the dashboard shows exactly what the
+  // customer saw.
+  for (const bubble of ai.replies) {
+    await prisma.message.create({
+      data: { conversationId: conversation.id, role: MessageRole.BOT, content: bubble },
+    });
+  }
   await prisma.conversation.update({
     where: { id: conversation.id },
     data: { lastActive: new Date() },
@@ -152,8 +156,13 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
 
   // A failed reply must not skip the handoff below: getting the lead to staff
   // matters more than the chat message landing.
+  // All bubbles go out in a single reply call: they arrive as separate messages
+  // in the chat, and a reply is free where a push message would be metered.
   try {
-    await replyMessage(batch[batch.length - 1].replyToken, [{ type: "text", text: ai.reply }]);
+    await replyMessage(
+      batch[batch.length - 1].replyToken,
+      ai.replies.map((text) => ({ type: "text" as const, text })),
+    );
   } catch (err) {
     console.error("[inbox] reply failed", err);
   }
