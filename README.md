@@ -52,7 +52,11 @@
 3. ในแท็บ **Basic settings** คัดลอก `Channel secret`
 4. ปิด **Auto-reply messages** และ **Greeting messages** ของ LINE OA
    (ที่ https://manager.line.biz) เพื่อไม่ให้ตอบซ้อนกับบอท
-5. เปิด **Use webhook** ให้เป็น ON
+
+> 🛑 **ยังไม่ต้องตั้งค่า Webhook ในขั้นตอนนี้** — ช่อง "ลิงก์ Webhook" ต้องใช้ URL ของ
+> ระบบที่ deploy แล้ว ซึ่งจะได้ในขั้นตอนที่ 6 ให้ปล่อยว่างไว้ก่อนแล้วกลับมาทำทีหลัง
+> (จะตั้งจาก LINE Developers Console หรือจาก LINE OA Manager → การตั้งค่า →
+> Messaging API ก็ได้ ทั้งสองที่คือค่าเดียวกัน)
 
 ### 2) ขอ Gemini API key
 
@@ -97,8 +101,13 @@ npm run dev                 # http://localhost:3000
 1. Import repo นี้เข้า Vercel และใส่ environment variables ทั้งหมดข้างต้น
 2. Deploy แล้วรัน migration กับฐานข้อมูล production (`npx prisma migrate deploy`
    โดยตั้ง `DATABASE_URL` ของ production)
-3. นำ URL `https://<โดเมนของคุณ>/api/line/webhook` ไปใส่ในช่อง **Webhook URL**
-   ของ LINE Developers Console แล้วกด **Verify**
+3. กลับไปที่การตั้งค่า LINE (ขั้นตอนที่ 1) นำ URL
+   `https://<โดเมนของคุณ>/api/line/webhook` ใส่ในช่อง **Webhook URL / ลิงก์ Webhook**
+   → บันทึก → เปิด **Use webhook** ให้เป็น ON → กด **Verify**
+
+   ต้องใส่ `LINE_CHANNEL_SECRET` ใน Vercel ให้ถูกต้องก่อนกด Verify เพราะ LINE จะส่ง
+   request ที่มีลายเซ็นมาทดสอบ ถ้า secret ไม่ตรง ระบบจะตอบ 401 และ Verify จะไม่ผ่าน
+   (เป็นการทำงานที่ถูกต้อง ไม่ใช่ข้อผิดพลาด)
 
 ## การใช้งาน dashboard
 
