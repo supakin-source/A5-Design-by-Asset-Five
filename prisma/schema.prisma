@@ -87,6 +87,23 @@ model Message {
   @@index([createdAt])
 }
 
+// Short-lived queue of inbound LINE messages. Customers usually type in
+// fragments ("สวัสดี" / "อยากติดต่อเรื่อง" / "การต่อเติม"), so each message waits
+// a couple of seconds here; whichever invocation finds itself holding the newest
+// message claims the whole batch, merges it, and answers once.
+model PendingMessage {
+  id            String   @id @default(cuid())
+  lineUserId    String
+  lineMessageId String   @unique
+  kind          String // "text" | "image"
+  text          String   @default("")
+  replyToken    String
+  createdAt     DateTime @default(now())
+  processedAt   DateTime?
+
+  @@index([lineUserId, processedAt])
+}
+
 model StaffNotification {
   id        String   @id @default(cuid())
   leadId    String

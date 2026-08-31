@@ -67,11 +67,11 @@ function getClient(): GoogleGenerativeAI {
 export async function generateChatReply(params: {
   history: ChatTurn[];
   userMessage: string;
-  image?: { base64: string; mimeType: string };
+  images?: Array<{ base64: string; mimeType: string }>;
 }): Promise<StructuredChatReply> {
   const userParts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [];
-  if (params.image) {
-    userParts.push({ inlineData: { data: params.image.base64, mimeType: params.image.mimeType } });
+  for (const image of params.images ?? []) {
+    userParts.push({ inlineData: { data: image.base64, mimeType: image.mimeType } });
   }
   userParts.push({ text: params.userMessage || "(ลูกค้าส่งรูปภาพมาโดยไม่มีข้อความ)" });
 
