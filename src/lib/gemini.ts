@@ -85,7 +85,10 @@ export async function generateChatReply(params: {
   // customer is never left without an answer — see docs/AI_POLICY.md §3.
   try {
     const model = getClient().getGenerativeModel({
-      model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+      // Google retires model IDs on a schedule (gemini-2.0-flash was shut down
+      // 2026-06-01), so check the current model list when calls start failing
+      // with 404 and override GEMINI_MODEL rather than editing this default.
+      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
       systemInstruction: buildSystemPrompt(),
       generationConfig: {
         responseMimeType: "application/json",

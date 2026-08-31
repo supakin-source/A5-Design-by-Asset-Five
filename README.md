@@ -31,7 +31,7 @@
 
 - **Next.js 16 (App Router) + TypeScript** — รวม webhook และ dashboard ในโปรเจกต์เดียว
   deploy บน Vercel ได้ฟรี
-- **Google Gemini** (`gemini-2.0-flash` โดยค่าเริ่มต้น) — รองรับทั้งข้อความและรูปภาพ
+- **Google Gemini** (`gemini-3.5-flash` โดยค่าเริ่มต้น) — รองรับทั้งข้อความและรูปภาพ
   (อ่านข้อความในรูป/สรุปภาพหน้างาน) ในคำขอเดียว ไม่ต้องต่อ OCR แยก และมี free tier
   ที่เพียงพอกับปริมาณลูกค้าระดับไม่เกิน ~20 คน/วัน
 - **Prisma + PostgreSQL** — เก็บ lead, บทสนทนา และข้อมูลเชิงหมวดหมู่สำหรับวิเคราะห์
@@ -78,7 +78,7 @@ free tier ให้สอดคล้องกับปริมาณลูก�
 | `LINE_CHANNEL_SECRET` | Channel secret (ใช้ตรวจลายเซ็น webhook) |
 | `LINE_STAFF_NOTIFY_ID` | user ID หรือ group ID ที่จะรับแจ้งเตือนลูกค้าใหม่ |
 | `GEMINI_API_KEY` | API key จาก Google AI Studio |
-| `GEMINI_MODEL` | ค่าเริ่มต้น `gemini-2.0-flash` |
+| `GEMINI_MODEL` | ค่าเริ่มต้น `gemini-3.5-flash` (ดูหมายเหตุเรื่องการปลดระวางรุ่นด้านล่าง) |
 | `DATABASE_URL` | connection string ของ PostgreSQL |
 | `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` | บัญชีเข้า dashboard ของทีมงาน |
 | `SESSION_SECRET` | สตริงสุ่มยาว ๆ ใช้เซ็น session cookie |
@@ -140,6 +140,19 @@ npm run dev                 # http://localhost:3000
   ข้อมูลและส่งต่อทีมงาน — **ห้ามเสนอราคาหรือรับปากระยะเวลา/เงื่อนไขสัญญา**
 - หากต้องการให้บอทตอบเรื่องใหม่ ให้เพิ่มเนื้อหาในฐานความรู้ ไม่ใช่แก้กฎให้ตอบได้
   ทุกอย่าง
+
+## ⚠️ การปลดระวางรุ่นของ Gemini (ต้องตรวจเป็นระยะ)
+
+Google ทยอยปิดให้บริการ model รุ่นเก่าตามกำหนด เช่น `gemini-2.0-flash` ถูกปิดไปแล้ว
+เมื่อ 1 มิถุนายน 2026 **เมื่อรุ่นที่ใช้อยู่ถูกปิด บอทจะไม่ตอบด้วย AI อีก** แต่จะตอบ
+ข้อความสำรองและส่งต่อทีมงานทุกครั้ง (เห็น `[gemini] falling back to human handoff`
+พร้อม error 404 ใน log ของ Vercel)
+
+วิธีแก้เมื่อเกิดเหตุนี้: ตรวจรายชื่อรุ่นที่ใช้ได้ปัจจุบัน แล้วแก้ค่า `GEMINI_MODEL`
+ใน Vercel → Redeploy (ไม่ต้องแก้โค้ด)
+
+ตรวจรายชื่อรุ่นที่ key ของคุณใช้ได้:
+`https://generativelanguage.googleapis.com/v1beta/models?key=<GEMINI_API_KEY>`
 
 ## พฤติกรรมเมื่อระบบ AI ใช้งานไม่ได้
 
