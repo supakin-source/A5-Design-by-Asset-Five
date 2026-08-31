@@ -99,6 +99,11 @@ npm run dev                 # http://localhost:3000
 ### 6) Deploy บน Vercel และตั้ง webhook
 
 1. Import repo นี้เข้า Vercel และใส่ environment variables ทั้งหมดข้างต้น
+
+   > ตรวจว่า **Framework Preset** เป็น `Next.js` (ไม่ใช่ `Other`) ไม่งั้น build จะสำเร็จ
+   > แต่ deploy fail ด้วยข้อความ `No Output Directory named "public" found`
+   > โปรเจกต์มี `vercel.json` ระบุ `"framework": "nextjs"` ไว้แล้ว แต่ถ้าค่าใน
+   > dashboard ถูกตั้งเป็น Other ไว้ก่อนหน้า ให้แก้ที่ Settings → Build and Deployment
 2. กด Deploy — สคริปต์ `build` จะรัน `prisma migrate deploy` ให้อัตโนมัติ จึงสร้าง
    ตารางในฐานข้อมูลเองโดยไม่ต้องรันคำสั่งในเครื่อง (ถ้าต้องการรันมือ ใช้
    `npx prisma migrate deploy` โดยตั้ง `DATABASE_URL` ของ production)
