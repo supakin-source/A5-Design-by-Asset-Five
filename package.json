@@ -11,6 +11,13 @@
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"
   },
+  "//allowScripts": "npm 12+ blocks install scripts until approved. Prisma's postinstall downloads the query and schema engine binaries, without which `prisma generate` and `prisma migrate deploy` fail during the Vercel build; esbuild's installs the binary tsx needs for the seed script.",
+  "allowScripts": {
+    "prisma": true,
+    "@prisma/client": true,
+    "@prisma/engines": true,
+    "esbuild": true
+  },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@prisma/client": "^5.22.0",
