@@ -1,0 +1,101 @@
+// A5 Design LINE OA Chatbot — data model
+// Two jobs this schema supports:
+//  1) Lead capture & handoff to staff (Lead, StaffNotification)
+//  2) Conversation -> market data for analytics (Conversation, Message)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  NEW // just started chatting, not enough info yet
+  HANDED_OFF // enough info collected / customer asked for a human, staff notified
+  CONTACTED // staff has followed up
+  CLOSED // done (won, lost, or not a real lead)
+}
+
+enum MessageRole {
+  USER
+  BOT
+  SYSTEM // e.g. handoff notices, not shown to the customer
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  lineUserId  String     @unique
+  displayName String?
+  phone       String?
+  projectType String? // e.g. "บ้านเดี่ยว", "รีโนเวท", "อาคารพาณิชย์", "ออกแบบอย่างเดียว"
+  budgetRange String?
+  location    String?
+  timeline    String?
+  contactNote String? // e.g. preferred time to be contacted
+  notes       String? // free-text notes staff can edit
+  status      LeadStatus @default(NEW)
+
+  // PDPA: when the data-collection notice was shown/acknowledged to this user
+  consentShownAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations     Conversation[]
+  staffNotifications StaffNotification[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Conversation {
+  id         String   @id @default(cuid())
+  leadId     String
+  lead       Lead     @relation(fields: [leadId], references: [id])
+  startedAt  DateTime @default(now())
+  lastActive DateTime @default(now())
+
+  messages Message[]
+
+  @@index([leadId])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           MessageRole
+
+  // Customer-facing text. For image messages this holds the AI-generated
+  // description/summary of the photo, never the raw image bytes (PDPA: keep
+  // only what's needed to route the lead, not the customer's original file).
+  content String
+
+  hasImage Boolean @default(false)
+
+  // Market-data tags, filled in by the AI classification step
+  topic     String? // e.g. "ราคา", "แบบบ้าน", "ระยะเวลา", "ติดต่อทีมงาน"
+  sentiment String? // "positive" | "neutral" | "negative"
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([topic])
+  @@index([createdAt])
+}
+
+model StaffNotification {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  channel   String // "line"
+  status    String // "sent" | "failed"
+  message   String // the text that was sent to staff
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+}
