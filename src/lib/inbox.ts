@@ -1,4 +1,4 @@
-import { MessageRole, LeadStatus, type PendingMessage } from "@prisma/client";
+import { MessageRole, ProjectStatus, type PendingMessage } from "@prisma/client";
 import { prisma } from "./db";
 import { replyMessage, getLineProfile, getLineImageContent } from "./line";
 import { generateChatReply, type ChatTurn } from "./gemini";
@@ -7,6 +7,7 @@ import {
   applyExtractedFields,
   hasEnoughInfoForHandoff,
   markHandedOff,
+  formatKnownFields,
 } from "./lead";
 import { notifyStaff } from "./notify";
 import { isAcknowledgementOnlyBatch } from "./acknowledgement";
@@ -77,7 +78,7 @@ export async function processAfterDebounce(lineUserId: string, lineMessageId: st
 
 async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise<void> {
   const profile = await getLineProfile(lineUserId);
-  const { lead, conversation } = await getOrCreateLeadAndConversation(lineUserId, profile?.displayName);
+  const { lead, project, conversation } = await getOrCreateLeadAndConversation(lineUserId, profile?.displayName);
 
   // "ขอบคุณครับ", "โอเค", a lone 👍 — nothing to answer, and answering would
   // spend a Gemini request from a small daily quota. Recorded, not replied to.
@@ -151,7 +152,12 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
     mergedLength: combinedText.length,
   });
 
-  const ai = await generateChatReply({ history, userMessage: combinedText, images });
+  const ai = await generateChatReply({
+    history,
+    userMessage: combinedText,
+    images,
+    knownFields: formatKnownFields(lead, project),
+  });
 
   // Persist each fragment as its own transcript line, tagging the last one with
   // the market-data labels for this turn.
@@ -187,7 +193,10 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
     data: { lastActive: new Date() },
   });
 
-  const updatedLead = await applyExtractedFields(lead.id, ai.extractedFields);
+  const { lead: updatedLead, project: updatedProject } = await applyExtractedFields(
+    { leadId: lead.id, projectId: project.id },
+    ai.extractedFields,
+  );
 
   // A failed reply must not skip the handoff below: getting the lead to staff
   // matters more than the chat message landing.
@@ -207,10 +216,10 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
     }
   }
 
-  const shouldHandoff = ai.needsHuman || hasEnoughInfoForHandoff(updatedLead);
-  if (shouldHandoff && updatedLead.status === LeadStatus.NEW) {
-    await markHandedOff(updatedLead.id);
-    await notifyStaff(updatedLead, ai.escalationReason ?? undefined);
+  const shouldHandoff = ai.needsHuman || hasEnoughInfoForHandoff(updatedProject);
+  if (shouldHandoff && updatedProject.status === ProjectStatus.NEW) {
+    await markHandedOff(updatedProject.id);
+    await notifyStaff(updatedLead, updatedProject, ai.escalationReason ?? undefined);
     await prisma.message.create({
       data: {
         conversationId: conversation.id,

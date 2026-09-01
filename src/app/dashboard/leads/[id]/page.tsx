@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { MessageRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { LEAD_STATUS_LABEL, formatDateTime } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -13,39 +14,48 @@ const ROLE_LABEL: Record<MessageRole, string> = {
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const lead = await prisma.lead.findUnique({
+  const project = await prisma.project.findUnique({
     where: { id },
     include: {
+      lead: true,
       conversations: { include: { messages: { orderBy: { createdAt: "asc" } } }, orderBy: { startedAt: "asc" } },
       staffNotifications: { orderBy: { createdAt: "desc" } },
     },
   });
 
-  if (!lead) notFound();
+  if (!project) notFound();
+
+  // Other service requests from the same customer — the point of splitting
+  // Lead (identity) from Project (one inquiry) is exactly so staff can see
+  // this history instead of it being silently overwritten.
+  const otherProjects = await prisma.project.findMany({
+    where: { leadId: project.leadId, id: { not: project.id } },
+    orderBy: { createdAt: "desc" },
+  });
 
   const details: Array<[string, string]> = [
-    ["ชื่อ", lead.displayName ?? "—"],
-    ["เบอร์ติดต่อ", lead.phone ?? "—"],
-    ["ประเภทงาน", lead.projectType ?? "—"],
-    ["รายละเอียดงาน", lead.projectDetail ?? "—"],
-    ["งบประมาณ", lead.budgetRange ?? "—"],
-    ["พื้นที่/ทำเล", lead.location ?? "—"],
-    ["กรอบเวลา", lead.timeline ?? "—"],
-    ["ช่วงเวลาที่สะดวกติดต่อ", lead.contactNote ?? "—"],
-    ["สถานะ", LEAD_STATUS_LABEL[lead.status]],
-    ["เข้ามาเมื่อ", formatDateTime(lead.createdAt)],
+    ["ชื่อ", project.lead.displayName ?? "—"],
+    ["เบอร์ติดต่อ", project.phone ?? "—"],
+    ["ประเภทงาน", project.projectType ?? "—"],
+    ["รายละเอียดงาน", project.projectDetail ?? "—"],
+    ["งบประมาณ", project.budgetRange ?? "—"],
+    ["พื้นที่/ทำเล", project.location ?? "—"],
+    ["กรอบเวลา", project.timeline ?? "—"],
+    ["ช่วงเวลาที่สะดวกติดต่อ", project.contactNote ?? "—"],
+    ["สถานะ", PROJECT_STATUS_LABEL[project.status]],
+    ["เข้ามาเมื่อ", formatDateTime(project.createdAt)],
   ];
 
-  const messages = lead.conversations.flatMap((c) => c.messages);
+  const messages = project.conversations.flatMap((c) => c.messages);
 
   return (
     <>
-      <h1 style={{ fontSize: 20, marginTop: 0 }}>{lead.displayName ?? "(ไม่ระบุชื่อ)"}</h1>
+      <h1 style={{ fontSize: 20, marginTop: 0 }}>{project.lead.displayName ?? "(ไม่ระบุชื่อ)"}</h1>
 
       <div className="grid two">
         <div className="card">
           <h2>ข้อมูลลูกค้า</h2>
-          <p className="sub">ข้อมูลที่บอทเก็บได้จากบทสนทนา</p>
+          <p className="sub">ข้อมูลที่บอทเก็บได้จากบทสนทนา (งานนี้)</p>
           <div className="table-wrap">
             <table>
               <tbody>
@@ -63,11 +73,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         <div className="card">
           <h2>การแจ้งเตือนทีมงาน</h2>
           <p className="sub">ประวัติการส่งต่อข้อมูลให้ผู้รับผิดชอบ</p>
-          {lead.staffNotifications.length === 0 ? (
+          {project.staffNotifications.length === 0 ? (
             <p className="empty">ยังไม่มีการส่งต่อ</p>
           ) : (
             <ul style={{ paddingLeft: 18, margin: 0 }}>
-              {lead.staffNotifications.map((n) => (
+              {project.staffNotifications.map((n) => (
                 <li key={n.id} style={{ marginBottom: 6 }}>
                   {formatDateTime(n.createdAt)} — {n.status === "sent" ? "ส่งสำเร็จ" : `ส่งไม่สำเร็จ: ${n.error ?? "ไม่ทราบสาเหตุ"}`}
                 </li>
@@ -76,6 +86,39 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
       </div>
+
+      {otherProjects.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h2>ประวัติการติดต่อเข้ารับบริการอื่น ๆ ของลูกค้ารายนี้</h2>
+          <p className="sub">ลูกค้าคนเดิมกลับมาขอรับบริการใหม่ — งานอื่นของลูกค้ารายนี้ ({otherProjects.length} งาน)</p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ประเภทงาน</th>
+                  <th>รายละเอียด</th>
+                  <th>สถานะ</th>
+                  <th>เข้ามาเมื่อ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {otherProjects.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <Link href={`/dashboard/leads/${p.id}`}>{p.projectType ?? "(ไม่ระบุประเภทงาน)"}</Link>
+                    </td>
+                    <td style={{ whiteSpace: "normal", maxWidth: 260 }}>{p.projectDetail ?? "—"}</td>
+                    <td>
+                      <span className="badge">{PROJECT_STATUS_LABEL[p.status]}</span>
+                    </td>
+                    <td>{formatDateTime(p.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: 16 }}>
         <h2>บทสนทนา</h2>

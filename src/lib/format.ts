@@ -1,10 +1,10 @@
-import { LeadStatus } from "@prisma/client";
+import { ProjectStatus } from "@prisma/client";
 
-export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
-  [LeadStatus.NEW]: "ใหม่ (ยังเก็บข้อมูล)",
-  [LeadStatus.HANDED_OFF]: "ส่งต่อทีมงานแล้ว",
-  [LeadStatus.CONTACTED]: "ทีมงานติดต่อแล้ว",
-  [LeadStatus.CLOSED]: "ปิดเคส",
+export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
+  [ProjectStatus.NEW]: "ใหม่ (ยังเก็บข้อมูล)",
+  [ProjectStatus.HANDED_OFF]: "ส่งต่อทีมงานแล้ว",
+  [ProjectStatus.CONTACTED]: "ทีมงานติดต่อแล้ว",
+  [ProjectStatus.CLOSED]: "ปิดเคส",
 };
 
 export function formatDateTime(date: Date): string {

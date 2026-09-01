@@ -1,22 +1,29 @@
 import Link from "next/link";
-import { LeadStatus } from "@prisma/client";
+import { ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { LEAD_STATUS_LABEL, formatDateTime } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [total, newThisWeek, handedOff, pendingContact, recentLeads] = await Promise.all([
+  // "ลูกค้า" counts unique customers (Lead); handoff/contact status and the
+  // recent-activity table are per service request (Project) — a returning
+  // customer's second inquiry is a separate row there, not a repeat of the
+  // first.
+  const [total, newThisWeek, totalProjects, handedOff, pendingContact, recentProjects] = await Promise.all([
     prisma.lead.count(),
     prisma.lead.count({ where: { createdAt: { gte: since } } }),
-    prisma.lead.count({ where: { status: { in: [LeadStatus.HANDED_OFF, LeadStatus.CONTACTED, LeadStatus.CLOSED] } } }),
-    prisma.lead.count({ where: { status: LeadStatus.HANDED_OFF } }),
-    prisma.lead.findMany({ orderBy: { updatedAt: "desc" }, take: 10 }),
+    prisma.project.count(),
+    prisma.project.count({
+      where: { status: { in: [ProjectStatus.HANDED_OFF, ProjectStatus.CONTACTED, ProjectStatus.CLOSED] } },
+    }),
+    prisma.project.count({ where: { status: ProjectStatus.HANDED_OFF } }),
+    prisma.project.findMany({ include: { lead: true }, orderBy: { updatedAt: "desc" }, take: 10 }),
   ]);
 
-  const handoffRate = total > 0 ? Math.round((handedOff / total) * 100) : 0;
+  const handoffRate = totalProjects > 0 ? Math.round((handedOff / totalProjects) * 100) : 0;
 
   return (
     <>
@@ -44,7 +51,7 @@ export default async function OverviewPage() {
       <div className="card">
         <h2>ความเคลื่อนไหวล่าสุด</h2>
         <p className="sub">10 รายการที่มีการอัปเดตล่าสุด</p>
-        {recentLeads.length === 0 ? (
+        {recentProjects.length === 0 ? (
           <p className="empty">ยังไม่มีข้อมูลลูกค้าเข้ามา</p>
         ) : (
           <div className="table-wrap">
@@ -59,17 +66,17 @@ export default async function OverviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentLeads.map((lead) => (
-                  <tr key={lead.id}>
+                {recentProjects.map((project) => (
+                  <tr key={project.id}>
                     <td>
-                      <Link href={`/dashboard/leads/${lead.id}`}>{lead.displayName ?? "(ไม่ระบุชื่อ)"}</Link>
+                      <Link href={`/dashboard/leads/${project.id}`}>{project.lead.displayName ?? "(ไม่ระบุชื่อ)"}</Link>
                     </td>
-                    <td>{lead.projectType ?? "—"}</td>
-                    <td>{lead.phone ?? "—"}</td>
+                    <td>{project.projectType ?? "—"}</td>
+                    <td>{project.phone ?? "—"}</td>
                     <td>
-                      <span className="badge">{LEAD_STATUS_LABEL[lead.status]}</span>
+                      <span className="badge">{PROJECT_STATUS_LABEL[project.status]}</span>
                     </td>
-                    <td>{formatDateTime(lead.updatedAt)}</td>
+                    <td>{formatDateTime(project.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>

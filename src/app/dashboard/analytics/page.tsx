@@ -17,8 +17,11 @@ function foldTail(data: CategoryDatum[]): CategoryDatum[] {
   return [...head, { label: "อื่น ๆ", value: tailTotal }];
 }
 
-async function leadFieldDistribution(field: "projectType" | "budgetRange" | "location"): Promise<CategoryDatum[]> {
-  const rows = await prisma.lead.groupBy({
+// These fields live on Project (one row per service request), not on Lead —
+// a returning customer's second, unrelated job must count as its own data
+// point rather than overwriting the first.
+async function projectFieldDistribution(field: "projectType" | "budgetRange" | "location"): Promise<CategoryDatum[]> {
+  const rows = await prisma.project.groupBy({
     by: [field],
     _count: { _all: true },
     where: { [field]: { not: null } },
@@ -36,9 +39,9 @@ export default async function AnalyticsPage() {
   const since = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
 
   const [projectTypes, budgets, locations, topicRows, sentimentRows, recentLeads] = await Promise.all([
-    leadFieldDistribution("projectType"),
-    leadFieldDistribution("budgetRange"),
-    leadFieldDistribution("location"),
+    projectFieldDistribution("projectType"),
+    projectFieldDistribution("budgetRange"),
+    projectFieldDistribution("location"),
     prisma.message.groupBy({
       by: ["topic"],
       _count: { _all: true },

@@ -8,8 +8,9 @@
  *   npm run db:reset-test -- --yes     # actually delete
  *   npm run db:reset-test -- --yes --before=2026-09-02   # only rows older than a date
  *
- * Leads, conversations, messages, staff notifications and the pending-message
- * queue all go together: a lead without its conversation is worse than no lead.
+ * Leads, projects, conversations, messages, staff notifications and the
+ * pending-message queue all go together: a lead without its projects is
+ * worse than no lead.
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -33,24 +34,28 @@ async function main() {
   const before = parseBefore(beforeArg);
   const leadWhere = before ? { createdAt: { lt: before } } : {};
 
-  const leads = await prisma.lead.findMany({ where: leadWhere, select: { id: true } });
+  const leads = await prisma.lead.findMany({ where: leadWhere, select: { id: true, lineUserId: true } });
   const leadIds = leads.map((l) => l.id);
+  const lineUserIds = leads.map((l) => l.lineUserId);
+
+  const projects = await prisma.project.findMany({ where: { leadId: { in: leadIds } }, select: { id: true } });
+  const projectIds = projects.map((p) => p.id);
 
   const conversations = await prisma.conversation.findMany({
-    where: { leadId: { in: leadIds } },
-    select: { id: true, lead: { select: { lineUserId: true } } },
+    where: { projectId: { in: projectIds } },
+    select: { id: true },
   });
   const conversationIds = conversations.map((c) => c.id);
-  const lineUserIds = [...new Set(conversations.map((c) => c.lead.lineUserId))];
 
   const [messages, notifications, pending] = await Promise.all([
     prisma.message.count({ where: { conversationId: { in: conversationIds } } }),
-    prisma.staffNotification.count({ where: { leadId: { in: leadIds } } }),
+    prisma.staffNotification.count({ where: { projectId: { in: projectIds } } }),
     prisma.pendingMessage.count({ where: { lineUserId: { in: lineUserIds } } }),
   ]);
 
   console.log(before ? `ขอบเขต: ข้อมูลที่สร้างก่อน ${before.toISOString()}` : "ขอบเขต: ข้อมูลทั้งหมด");
   console.log(`  ลูกค้า (Lead)            ${leads.length}`);
+  console.log(`  งานที่ติดต่อเข้ามา (Project) ${projects.length}`);
   console.log(`  บทสนทนา (Conversation)   ${conversations.length}`);
   console.log(`  ข้อความ (Message)        ${messages}`);
   console.log(`  แจ้งเตือนทีมงาน           ${notifications}`);
@@ -69,7 +74,8 @@ async function main() {
   // Children first: the schema has required relations back to the parents.
   await prisma.message.deleteMany({ where: { conversationId: { in: conversationIds } } });
   await prisma.conversation.deleteMany({ where: { id: { in: conversationIds } } });
-  await prisma.staffNotification.deleteMany({ where: { leadId: { in: leadIds } } });
+  await prisma.staffNotification.deleteMany({ where: { projectId: { in: projectIds } } });
+  await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
   await prisma.pendingMessage.deleteMany({ where: { lineUserId: { in: lineUserIds } } });
   await prisma.lead.deleteMany({ where: { id: { in: leadIds } } });
 

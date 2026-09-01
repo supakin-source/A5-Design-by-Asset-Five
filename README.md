@@ -309,7 +309,7 @@ npm run db:reset-test -- --yes           # ลบจริง
 npm run db:reset-test -- --yes --before=2026-09-02   # ลบเฉพาะที่เก่ากว่าวันที่กำหนด
 ```
 
-ลบ Lead, Conversation, Message, StaffNotification และคิวข้อความค้างไปพร้อมกันทั้งชุด
+ลบ Lead, Project, Conversation, Message, StaffNotification และคิวข้อความค้างไปพร้อมกันทั้งชุด
 (ถ้าลบแยกจะเหลือ lead ที่ไม่มีบทสนทนา ซึ่งแย่กว่าไม่มีข้อมูลเลย)
 
 รันกับฐานข้อมูล production ได้โดยตั้ง `DATABASE_URL` ให้ชี้ไปที่ Neon:

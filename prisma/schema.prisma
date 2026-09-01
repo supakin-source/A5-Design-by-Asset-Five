@@ -1,7 +1,13 @@
 // A5 Design LINE OA Chatbot — data model
 // Two jobs this schema supports:
-//  1) Lead capture & handoff to staff (Lead, StaffNotification)
+//  1) Lead capture & handoff to staff (Lead, Project, StaffNotification)
 //  2) Conversation -> market data for analytics (Conversation, Message)
+//
+// Lead is the customer's persistent identity (one row per LINE user, forever).
+// Project is one service request from them. The split exists so a returning
+// customer asking about a second, unrelated job gets a new Project instead of
+// overwriting the details of their first one — see getOrCreateLeadAndConversation
+// in src/lib/lead.ts.
 
 generator client {
   provider = "prisma-client-js"
@@ -12,7 +18,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum LeadStatus {
+enum ProjectStatus {
   NEW // just started chatting, not enough info yet
   HANDED_OFF // enough info collected / customer asked for a human, staff notified
   CONTACTED // staff has followed up
@@ -26,10 +32,31 @@ enum MessageRole {
 }
 
 model Lead {
-  id          String     @id @default(cuid())
-  lineUserId  String     @unique
+  id          String  @id @default(cuid())
+  lineUserId  String  @unique
   displayName String?
-  phone       String?
+
+  // PDPA: when the data-collection notice was shown/acknowledged to this user
+  consentShownAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@index([createdAt])
+}
+
+// One service request/inquiry from a customer. A new one is started whenever
+// the customer's most recent project has already been settled (handed off,
+// contacted, or closed) — see SETTLED_STATUSES in src/lib/lead.ts — so an old
+// inquiry's details stay intact instead of being overwritten by the next one.
+model Project {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id])
+
+  phone String?
   // One of PROJECT_TYPES in src/lib/policy.ts — a fixed vocabulary so the
   // dashboard groups cleanly instead of splitting one category across wordings.
   projectType String?
@@ -40,31 +67,29 @@ model Lead {
   timeline    String?
   contactNote String? // e.g. preferred time to be contacted
   notes       String? // free-text notes staff can edit
-  status      LeadStatus @default(NEW)
-
-  // PDPA: when the data-collection notice was shown/acknowledged to this user
-  consentShownAt DateTime?
+  status      ProjectStatus @default(NEW)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  conversations     Conversation[]
+  conversations      Conversation[]
   staffNotifications StaffNotification[]
 
   @@index([status])
   @@index([createdAt])
+  @@index([leadId])
 }
 
 model Conversation {
   id         String   @id @default(cuid())
-  leadId     String
-  lead       Lead     @relation(fields: [leadId], references: [id])
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id])
   startedAt  DateTime @default(now())
   lastActive DateTime @default(now())
 
   messages Message[]
 
-  @@index([leadId])
+  @@index([projectId])
 }
 
 model Message {
@@ -110,13 +135,13 @@ model PendingMessage {
 
 model StaffNotification {
   id        String   @id @default(cuid())
-  leadId    String
-  lead      Lead     @relation(fields: [leadId], references: [id])
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
   channel   String // "line"
   status    String // "sent" | "failed"
   message   String // the text that was sent to staff
   error     String?
   createdAt DateTime @default(now())
 
-  @@index([leadId])
+  @@index([projectId])
 }
