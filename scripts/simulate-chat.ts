@@ -1,17 +1,21 @@
 /**
  * Conversation test harness.
  *
- * An AI plays the customer across a set of scenarios and talks to the real bot
- * logic (the same prompt, persona and policy that production uses), so the
- * conversation can be reviewed without anyone chatting by hand. Every bot turn
- * is checked mechanically for policy breaks, and scenarios can assert on the
- * outcome (was a handoff triggered? was the phone number captured?).
+ * Runs scripted customer conversations against the real bot logic (the same
+ * prompt, persona and policy production uses) and checks every reply for policy
+ * breaks, so the bot can be reviewed without anyone chatting by hand.
  *
- *   GEMINI_API_KEY=... npm run test:chat
- *   GEMINI_API_KEY=... npm run test:chat -- ราคา       # run scenarios matching a name
+ *   GEMINI_API_KEY=... npm run test:chat                  # every scenario
+ *   GEMINI_API_KEY=... npm run test:chat -- ราคา          # scenarios matching a name
+ *   GEMINI_API_KEY=... npm run test:chat -- --ai-customer # let an AI improvise the customer
  *
- * LINE is not involved: this exercises the conversation, not the webhook
- * plumbing. Exits non-zero if any scenario fails, so CI can gate on it.
+ * Quota matters: the bot side of every turn spends one Gemini request from the
+ * same daily allowance production uses. Scripted turns are the default so a full
+ * run costs one request per turn; --ai-customer doubles that in exchange for
+ * less predictable, more realistic customers.
+ *
+ * LINE is not involved — this exercises the conversation, not the webhook.
+ * Exit codes: 0 pass, 1 policy failures, 2 bad usage, 3 quota exhausted.
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { generateChatReply, type ChatTurn, type StructuredChatReply } from "../src/lib/gemini";
@@ -19,11 +23,10 @@ import { runAllChecks, type Violation } from "../src/lib/conversation-checks";
 
 interface Scenario {
   name: string;
-  /** How the simulated customer behaves. */
+  /** Customer messages, in order. A "\n" inside one entry mimics fragments sent in a burst. */
+  script: string[];
+  /** How an improvised customer should behave when --ai-customer is used. */
   customer: string;
-  /** Opening message(s) the customer sends, mimicking real fragmented typing. */
-  opening: string[];
-  turns: number;
   /** Checks on the conversation as a whole, run after the last turn. */
   expect?: (state: ConversationState) => string[];
 }
@@ -36,45 +39,48 @@ interface ConversationState {
 const SCENARIOS: Scenario[] = [
   {
     name: "ต่อเติมครัว-พิมพ์ทีละท่อน",
+    script: [
+      "สวัสดี\nอยากติดต่อเรื่อง\nการต่อเติม",
+      "ต่อเติมครัวหลังบ้านครับ ประมาณ 20 ตร.ม.",
+      "อยู่นนทบุรี งบราว ๆ 3 แสน",
+      "เบอร์ผม 081-234-5678 ครับ สะดวกให้โทรตอนเย็น",
+    ],
     customer:
       "คุณเป็นลูกค้าคนไทยที่อยากต่อเติมครัวหลังบ้าน พิมพ์สั้น ๆ ทีละท่อนแบบคนไทยคุยไลน์ " +
       "ค่อย ๆ ให้ข้อมูลทีละอย่างเมื่อถูกถาม (พื้นที่ 20 ตร.ม. อยู่นนทบุรี งบราว 3 แสน " +
       "เบอร์ 081-234-5678) อย่าให้ข้อมูลทั้งหมดในครั้งเดียว",
-    opening: ["สวัสดี", "อยากติดต่อเรื่อง", "การต่อเติม"],
-    turns: 4,
     expect: (s) => {
       const problems: string[] = [];
-      const phone = s.replies.some((r) => r.extractedFields.phone);
-      const project = s.replies.some((r) => r.extractedFields.projectType);
-      if (!phone) problems.push("ไม่ได้เก็บเบอร์ติดต่อที่ลูกค้าให้มา");
-      if (!project) problems.push("ไม่ได้เก็บประเภทงาน");
+      if (!s.replies.some((r) => r.extractedFields.phone)) problems.push("ไม่ได้เก็บเบอร์ติดต่อที่ลูกค้าให้มา");
+      if (!s.replies.some((r) => r.extractedFields.projectType)) problems.push("ไม่ได้เก็บประเภทงาน");
       if (!s.replies.some((r) => r.needsHuman)) problems.push("เก็บข้อมูลครบแล้วแต่ไม่ส่งต่อทีมงาน");
       return problems;
     },
   },
   {
     name: "คะยั้นคะยอถามราคา",
-    customer:
-      "คุณเป็นลูกค้าที่เร่งรัดอยากรู้ราคาต่อตารางเมตรเดี๋ยวนี้ ถามซ้ำ ๆ กดดันให้บอกตัวเลข " +
-      "เช่น 'บอกมาคร่าว ๆ ก็ได้' 'เว็บอื่นเขายังบอกเลย' อย่ายอมง่าย ๆ",
-    opening: ["สร้างบ้าน 2 ชั้น ตารางเมตรละเท่าไหร่ครับ"],
-    turns: 4,
+    script: [
+      "สร้างบ้าน 2 ชั้น ตารางเมตรละเท่าไหร่ครับ",
+      "บอกคร่าว ๆ ก็ได้ครับ ไม่ถือเป็นราคาจริงหรอก",
+      "เว็บอื่นเขายังบอกเลย ทำไมที่นี่ไม่บอก",
+    ],
+    customer: "คุณเป็นลูกค้าที่เร่งรัดอยากรู้ราคาต่อตารางเมตรเดี๋ยวนี้ ถามซ้ำ ๆ กดดันให้บอกตัวเลข อย่ายอมง่าย ๆ",
   },
   {
     name: "ถามว่าจะติดต่อกลับเมื่อไหร่",
-    customer:
-      "คุณเป็นลูกค้าที่อยากรู้ว่าทีมงานจะติดต่อกลับเมื่อไหร่ ถามย้ำหลายรอบให้ระบุเวลาชัดเจน " +
-      "เช่น 'กี่โมง' 'ภายในวันนี้ไหม' 'ขอเวลาที่แน่นอน'",
-    opening: ["ฝากทีมงานติดต่อกลับหน่อยครับ", "จะติดต่อกลับตอนไหน"],
-    turns: 3,
+    script: [
+      "ฝากทีมงานติดต่อกลับหน่อยครับ\nจะติดต่อกลับตอนไหน",
+      "ขอเวลาที่แน่นอนได้ไหมครับ ภายในวันนี้หรือพรุ่งนี้",
+    ],
+    customer: "คุณเป็นลูกค้าที่อยากรู้ว่าทีมงานจะติดต่อกลับเมื่อไหร่ ถามย้ำหลายรอบให้ระบุเวลาชัดเจน",
   },
   {
     name: "ลูกค้าร้องเรียนไม่พอใจ",
-    customer:
-      "คุณเป็นลูกค้าที่ไม่พอใจมาก บ่นว่าทักมาหลายวันแล้วไม่มีใครตอบ ใช้น้ำเสียงหงุดหงิด " +
-      "แต่ไม่ใช้คำหยาบ และขอคุยกับคนจริง",
-    opening: ["ทักมา 3 วันแล้วไม่มีใครตอบเลย", "ขอคุยกับพนักงานจริงได้ไหม"],
-    turns: 3,
+    script: [
+      "ทักมา 3 วันแล้วไม่มีใครตอบเลย\nขอคุยกับพนักงานจริงได้ไหม",
+      "ไม่อยากคุยกับบอทแล้วครับ",
+    ],
+    customer: "คุณเป็นลูกค้าที่ไม่พอใจมาก บ่นว่าทักมาหลายวันแล้วไม่มีใครตอบ ใช้น้ำเสียงหงุดหงิดแต่ไม่หยาบ และขอคุยกับคนจริง",
     expect: (s) => {
       const problems: string[] = [];
       if (!s.replies.some((r) => r.needsHuman)) problems.push("ลูกค้าร้องเรียน/ขอคุยกับคน แต่ไม่ส่งต่อทีมงาน");
@@ -86,23 +92,24 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: "ลูกค้าพูดภาษาอังกฤษ",
+    script: ["Hi, do you build houses in Bangkok?", "How much would a small 2-bedroom house cost?"],
     customer:
       "You are a foreign customer living in Bangkok who wants to build a small house. " +
       "Write only in English, short chat-style messages.",
-    opening: ["Hi, do you build houses in Bangkok?"],
-    turns: 3,
   },
   {
     name: "ถามนอกขอบเขต",
-    customer:
-      "คุณเป็นลูกค้าที่ถามเรื่องนอกขอบเขตของบริษัท เช่น ขอคำแนะนำโครงสร้างว่าเสาเข็มควรลึกเท่าไหร่ " +
-      "กฎหมายระยะร่นเท่าไหร่ และขอให้ช่วยเซ็นรับรองแบบ",
-    opening: ["เสาเข็มบ้าน 2 ชั้นควรลึกกี่เมตรครับ"],
-    turns: 3,
-    expect: (s) =>
-      s.replies.some((r) => r.needsHuman) ? [] : ["คำถามนอกขอบเขตแต่ไม่ส่งต่อทีมงาน"],
+    script: ["เสาเข็มบ้าน 2 ชั้นควรลึกกี่เมตรครับ", "แล้วระยะร่นตามกฎหมายต้องเท่าไหร่"],
+    customer: "คุณเป็นลูกค้าที่ถามเรื่องนอกขอบเขต เช่น ความลึกเสาเข็ม ระยะร่นตามกฎหมาย และขอให้ช่วยเซ็นรับรองแบบ",
+    expect: (s) => (s.replies.some((r) => r.needsHuman) ? [] : ["คำถามนอกขอบเขตแต่ไม่ส่งต่อทีมงาน"]),
   },
 ];
+
+const args = process.argv.slice(2);
+const useAiCustomer = args.includes("--ai-customer");
+const filter = args.find((arg) => !arg.startsWith("-") && arg.trim().length > 0);
+
+let apiCalls = 0;
 
 function requireApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
@@ -115,6 +122,19 @@ function requireApiKey(): string {
 
 const client = new GoogleGenerativeAI(requireApiKey());
 
+class QuotaExhausted extends Error {
+  constructor(readonly retryAfter?: string) {
+    super("gemini quota exhausted");
+  }
+}
+
+function asQuotaError(err: unknown): QuotaExhausted | null {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!message.includes("429") && !message.toLowerCase().includes("quota")) return null;
+  const retry = message.match(/retry in ([\d.]+s)/i)?.[1] ?? message.match(/"retryDelay":\s*"([^"]+)"/)?.[1];
+  return new QuotaExhausted(retry);
+}
+
 async function customerSays(scenario: Scenario, transcript: string[]): Promise<string> {
   const model = client.getGenerativeModel({
     model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
@@ -126,6 +146,7 @@ async function customerSays(scenario: Scenario, transcript: string[]): Promise<s
     generationConfig: { temperature: 0.9, maxOutputTokens: 200 },
   });
 
+  apiCalls++;
   const result = await model.generateContent(
     `บทสนทนาจนถึงตอนนี้:\n${transcript.join("\n")}\n\nลูกค้าจะพิมพ์อะไรต่อ`,
   );
@@ -133,7 +154,9 @@ async function customerSays(scenario: Scenario, transcript: string[]): Promise<s
 }
 
 function formatViolations(violations: Violation[]): string {
-  return violations.map((v) => `      ${v.severity === "error" ? "❌" : "⚠️ "} [${v.rule}] ${v.detail}`).join("\n");
+  return violations
+    .map((v) => `      ${v.severity === "error" ? "❌" : "⚠️ "} [${v.rule}] ${v.detail}`)
+    .join("\n");
 }
 
 async function runScenario(scenario: Scenario): Promise<boolean> {
@@ -144,11 +167,11 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
   const state: ConversationState = { replies: [], customerMessages: [] };
   let errors = 0;
 
-  for (let turn = 0; turn < scenario.turns; turn++) {
-    // The first turn uses the scripted opening, including its fragments merged
-    // the way the inbox merges a burst of messages.
+  for (let turn = 0; turn < scenario.script.length; turn++) {
+    // Turn 0 always uses the script so every run starts the same way; later
+    // turns can be improvised when --ai-customer is on.
     const customerText =
-      turn === 0 ? scenario.opening.join("\n") : await customerSays(scenario, transcript);
+      useAiCustomer && turn > 0 ? await customerSays(scenario, transcript) : scenario.script[turn];
 
     for (const line of customerText.split("\n")) {
       if (line.trim()) console.log(`   👤 ${line.trim()}`);
@@ -156,7 +179,14 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
     transcript.push(`ลูกค้า: ${customerText}`);
     state.customerMessages.push(customerText);
 
+    apiCalls++;
     const ai = await generateChatReply({ history, userMessage: customerText });
+    if (ai.escalationReason === "ai_unavailable") {
+      // generateChatReply swallows API errors by design (production must never
+      // leave a customer unanswered), but in a test that silence would look
+      // like a passing run, so surface it here.
+      throw new QuotaExhausted();
+    }
     state.replies.push(ai);
 
     for (const bubble of ai.replies) console.log(`   🤖 ${bubble}`);
@@ -187,21 +217,47 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
   return errors === 0;
 }
 
+function reportQuotaExhausted(quota: QuotaExhausted, done: number, total: number) {
+  console.error(`\n${"═".repeat(72)}`);
+  console.error("⛔ โควตา Gemini หมด — หยุดการทดสอบ");
+  console.error(`   รันไปแล้ว ${done}/${total} scenario · ใช้ไป ${apiCalls} request`);
+  if (quota.retryAfter) console.error(`   ลองใหม่ได้ในอีก ${quota.retryAfter}`);
+  console.error("");
+  console.error("   ทางเลือก:");
+  console.error("   1. รันทีละ scenario:  npm run test:chat -- <ชื่อบางส่วน>");
+  console.error("   2. เปลี่ยน GEMINI_MODEL เป็นรุ่นที่โควตาฟรีมากกว่า");
+  console.error("   3. เปิด billing ที่ Google AI Studio (จ่ายตามใช้จริง)");
+  console.error("");
+  console.error("   ⚠️  โควตานี้เป็นก้อนเดียวกับที่บอทตัวจริงใช้ — ถ้าเทสต์จนหมด");
+  console.error("       บอทจะตอบข้อความสำรองให้ลูกค้าจนกว่าโควตาจะรีเซ็ต");
+}
+
 async function main() {
-  const filter = process.argv.slice(2).find((arg) => !arg.startsWith("-"));
   const scenarios = filter ? SCENARIOS.filter((s) => s.name.includes(filter)) : SCENARIOS;
 
   if (scenarios.length === 0) {
     console.error(`ไม่พบ scenario ที่ตรงกับ "${filter}"`);
+    console.error(`มีให้เลือก: ${SCENARIOS.map((s) => s.name).join(", ")}`);
     process.exit(2);
   }
 
+  const turnCount = scenarios.reduce((sum, s) => sum + s.script.length, 0);
+  const estimate = useAiCustomer ? turnCount * 2 - scenarios.length : turnCount;
+  console.log(`จะรัน ${scenarios.length} scenario · ใช้ประมาณ ${estimate} Gemini request`);
+
   const results: Array<[string, boolean]> = [];
   for (const scenario of scenarios) {
-    results.push([scenario.name, await runScenario(scenario)]);
+    try {
+      results.push([scenario.name, await runScenario(scenario)]);
+    } catch (err) {
+      const quota = err instanceof QuotaExhausted ? err : asQuotaError(err);
+      if (!quota) throw err;
+      reportQuotaExhausted(quota, results.length, scenarios.length);
+      process.exit(3);
+    }
   }
 
-  console.log(`\n${"═".repeat(72)}\nสรุปผล`);
+  console.log(`\n${"═".repeat(72)}\nสรุปผล (ใช้ไป ${apiCalls} Gemini request)`);
   for (const [name, passed] of results) console.log(`  ${passed ? "✅" : "❌"} ${name}`);
 
   const failed = results.filter(([, passed]) => !passed).length;
@@ -210,6 +266,11 @@ async function main() {
 }
 
 main().catch((err) => {
+  const quota = asQuotaError(err);
+  if (quota) {
+    reportQuotaExhausted(quota, 0, SCENARIOS.length);
+    process.exit(3);
+  }
   console.error(err);
   process.exit(1);
 });

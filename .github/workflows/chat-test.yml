@@ -7,9 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: "รันเฉพาะ scenario ที่ชื่อมีคำนี้ (เว้นว่าง = รันทั้งหมด)"
+        description: "รันเฉพาะ scenario ที่ชื่อมีคำนี้ (เว้นว่าง = รันทั้งหมด ~15 request)"
         required: false
         type: string
+      ai_customer:
+        description: "ให้ AI ด้นบทลูกค้าเอง (สมจริงกว่า แต่ใช้โควตาเกือบสองเท่า)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   chat:
@@ -27,7 +32,7 @@ jobs:
         run: npm ci
 
       - name: Talk to the bot
-        run: npm run test:chat -- "${{ inputs.scenario }}"
+        run: npm run test:chat -- "${{ inputs.scenario }}" ${{ inputs.ai_customer && '--ai-customer' || '' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
