@@ -8,6 +8,8 @@ import {
   hasEnoughInfoForHandoff,
   markHandedOff,
   formatKnownFields,
+  getPriorSettledProjects,
+  formatPriorProjectsNote,
 } from "./lead";
 import { notifyStaff } from "./notify";
 import { isAcknowledgementOnlyBatch } from "./acknowledgement";
@@ -78,7 +80,18 @@ export async function processAfterDebounce(lineUserId: string, lineMessageId: st
 
 async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise<void> {
   const profile = await getLineProfile(lineUserId);
-  const { lead, project, conversation } = await getOrCreateLeadAndConversation(lineUserId, profile?.displayName);
+  const { lead, project, conversation, isNewVisit } = await getOrCreateLeadAndConversation(
+    lineUserId,
+    profile?.displayName,
+  );
+
+  // Only worth asking "is this about your existing job?" while this new
+  // visit's project is still empty — once anything has been captured for it,
+  // the customer has already answered that question one way or another.
+  const priorProjectsNote =
+    isNewVisit && !project.projectType
+      ? formatPriorProjectsNote(await getPriorSettledProjects(lead.id, project.id))
+      : undefined;
 
   // "ขอบคุณครับ", "โอเค", a lone 👍 — nothing to answer, and answering would
   // spend a Gemini request from a small daily quota. Recorded, not replied to.
@@ -157,6 +170,7 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
     userMessage: combinedText,
     images,
     knownFields: formatKnownFields(lead, project),
+    priorProjectsNote,
   });
 
   // Persist each fragment as its own transcript line, tagging the last one with

@@ -182,11 +182,16 @@ type Contents = Array<{ role: string; parts: Array<{ text: string } | { inlineDa
 let requestsMade = 0;
 export const geminiRequestsMade = () => requestsMade;
 
-async function callModel(modelId: string, contents: Contents, knownFields?: string): Promise<StructuredChatReply> {
+async function callModel(
+  modelId: string,
+  contents: Contents,
+  knownFields?: string,
+  priorProjectsNote?: string,
+): Promise<StructuredChatReply> {
   requestsMade++;
   const model = getClient().getGenerativeModel({
     model: modelId,
-    systemInstruction: buildSystemPrompt(knownFields),
+    systemInstruction: buildSystemPrompt(knownFields, priorProjectsNote),
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema,
@@ -213,6 +218,11 @@ export async function generateChatReply(params: {
   // model has no way to know a fact was already given once it scrolls past
   // the recent-history window, and will re-ask for it or even deny having it.
   knownFields?: string;
+  // Set only on a genuinely new visit from a returning customer who has
+  // other settled projects on file (see formatPriorProjectsNote in
+  // src/lib/lead.ts) — prompts the model to confirm whether this contact is
+  // about an existing job before collecting fresh details for a new one.
+  priorProjectsNote?: string;
 }): Promise<StructuredChatReply> {
   const userParts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [];
   for (const image of params.images ?? []) {
@@ -232,7 +242,7 @@ export async function generateChatReply(params: {
   // customer is never left without an answer — see docs/AI_POLICY.md §3.
   let lastError: unknown;
   try {
-    return await callModel(primary, contents, params.knownFields);
+    return await callModel(primary, contents, params.knownFields, params.priorProjectsNote);
   } catch (err) {
     lastError = err;
     // Free-tier quota is counted per project PER MODEL, so a second model has
@@ -241,7 +251,7 @@ export async function generateChatReply(params: {
     if (isQuotaError(err) && fallback) {
       console.warn(`[gemini] ${primary} out of quota, retrying on ${fallback}`);
       try {
-        return await callModel(fallback, contents, params.knownFields);
+        return await callModel(fallback, contents, params.knownFields, params.priorProjectsNote);
       } catch (fallbackErr) {
         lastError = fallbackErr;
         console.error("[gemini] fallback model failed too", fallbackErr);

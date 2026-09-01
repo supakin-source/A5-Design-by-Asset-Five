@@ -2,11 +2,19 @@ import { prisma } from "./db";
 import type { StructuredChatReply } from "./gemini";
 import { ProjectStatus, type Lead, type Project } from "@prisma/client";
 
-// A project counts as settled once it has left staff's inbox — a returning
-// customer at that point is asking about something new, not continuing an
-// old conversation, so they get a fresh Project instead of overwriting the
-// settled one's details.
+// A project counts as settled once it has left staff's inbox.
 const SETTLED_STATUSES: ProjectStatus[] = [ProjectStatus.HANDED_OFF, ProjectStatus.CONTACTED, ProjectStatus.CLOSED];
+
+// A settled project only counts as "the customer is done, and is asking about
+// something new" once real time has passed since the conversation was last
+// active. Without this gap, a customer who simply keeps chatting after the
+// handoff threshold happens to trip (phone + project type collected) gets
+// fragmented into a brand-new Project on their very next message, even
+// though it's the same job — this is exactly the duplicate-data bug found
+// live (one "ต่อเติม" customer ended up with three Project rows within
+// minutes). An hour comfortably exceeds a normal chat's think-time gaps
+// while staying far short of "the customer came back another day".
+const NEW_VISIT_GAP_MS = 60 * 60 * 1000;
 
 export async function getOrCreateLeadAndConversation(lineUserId: string, displayName?: string) {
   let lead = await prisma.lead.findUnique({ where: { lineUserId } });
@@ -14,12 +22,23 @@ export async function getOrCreateLeadAndConversation(lineUserId: string, display
     lead = await prisma.lead.create({ data: { lineUserId, displayName, consentShownAt: new Date() } });
   }
 
-  let project = await prisma.project.findFirst({ where: { leadId: lead.id }, orderBy: { createdAt: "desc" } });
-  if (!project || SETTLED_STATUSES.includes(project.status)) {
+  const latest = await prisma.project.findFirst({
+    where: { leadId: lead.id },
+    orderBy: { createdAt: "desc" },
+    include: { conversations: { orderBy: { lastActive: "desc" }, take: 1 } },
+  });
+  const lastActive = latest?.conversations[0]?.lastActive;
+  const gapMs = lastActive ? Date.now() - lastActive.getTime() : Infinity;
+  const isNewVisit = latest ? SETTLED_STATUSES.includes(latest.status) && gapMs >= NEW_VISIT_GAP_MS : true;
+
+  let project: Project;
+  if (isNewVisit) {
     // Carry the phone number forward: it's very likely still valid, and
     // asking a returning customer to repeat it is exactly what customers
-    // have flagged as broken (see docs/AI_POLICY.md §1.2).
-    project = await prisma.project.create({ data: { leadId: lead.id, phone: project?.phone ?? undefined } });
+    // have flagged as broken (see docs/AI_POLICY.md §1.2a).
+    project = await prisma.project.create({ data: { leadId: lead.id, phone: latest?.phone ?? undefined } });
+  } else {
+    project = latest!;
   }
 
   let conversation = await prisma.conversation.findFirst({
@@ -30,7 +49,33 @@ export async function getOrCreateLeadAndConversation(lineUserId: string, display
     conversation = await prisma.conversation.create({ data: { projectId: project.id } });
   }
 
-  return { lead, project, conversation };
+  return { lead, project, conversation, isNewVisit };
+}
+
+// Other settled projects this lead already has on file, most recent first —
+// used to prompt the "is this about your existing job, or something new?"
+// clarifying question on a genuinely new visit. Excludes the project just
+// created for the current visit.
+export async function getPriorSettledProjects(leadId: string, excludeProjectId: string): Promise<Project[]> {
+  return prisma.project.findMany({
+    where: { leadId, id: { not: excludeProjectId }, status: { in: SETTLED_STATUSES } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function formatPriorProjectsNote(projects: Project[]): string | undefined {
+  if (projects.length === 0) return undefined;
+  const lines = projects.map((p, i) => {
+    const parts = [p.projectType, p.projectDetail, p.location].filter(Boolean).join(" / ");
+    return `- งานก่อนหน้าที่ ${i + 1}: ${parts || "(ไม่มีรายละเอียด)"}`;
+  });
+  return [
+    "ลูกค้ารายนี้มีงานเดิมที่เคยติดต่อไว้แล้ว (ดูรายการด้านล่าง) และตอนนี้ทักมาใหม่ในรอบนี้:",
+    ...lines,
+    "ก่อนเก็บข้อมูลใหม่ ให้ถามยืนยันสั้น ๆ ก่อนว่าเรื่องที่ติดต่อเข้ามาครั้งนี้เกี่ยวกับงานเดิมข้างต้น",
+    "หรือเป็นงานใหม่ ถ้าลูกค้าบอกว่าเป็นเรื่องเดียวกับงานเดิม ให้ส่งต่อทีมงานทันที (needsHuman = true)",
+    "ไม่ต้องถามเก็บข้อมูลซ้ำใหม่ทั้งหมด ถ้าเป็นงานใหม่ ให้เก็บข้อมูลตามปกติ",
+  ].join("\n");
 }
 
 export async function applyExtractedFields(

@@ -246,7 +246,7 @@ replies เป็นรายการว่าง) ในกรณีเหล�
   ท่องสคริปต์" ข้างต้น)
 `.trim();
 
-export function buildSystemPrompt(knownFields?: string): string {
+export function buildSystemPrompt(knownFields?: string, priorProjectsNote?: string): string {
   return `
 คุณคือ "${PERSONA.name}" ผู้ช่วย AI ประจำ LINE Official Account ของ
 "A5 Design by Asset Five" บริษัทรับออกแบบและก่อสร้างแบบ turn-key คุณทำหน้าที่
@@ -262,6 +262,13 @@ ${knownFields}
 ข้อมูลข้างต้นถูกบันทึกไว้จริงในระบบแล้ว (อาจมาจากการติดต่อครั้งก่อนของลูกค้ารายนี้
 ก็ได้) ถ้าลูกค้าบอกว่าเคยให้ข้อมูลนี้ไปแล้ว ให้ยืนยันว่ามีอยู่จริง **ห้ามพูดว่าไม่มี
 ข้อมูลหรือระบบไม่ได้บันทึกไว้ล่วงหน้าเด็ดขาด** และห้ามถามข้อมูลเหล่านี้ใหม่ทั้งหมด
+`
+    : ""
+}${
+  priorProjectsNote
+    ? `
+=== ลูกค้าเดิมทักมาใหม่ — ต้องยืนยันก่อนว่าเรื่องเดิมหรือเรื่องใหม่ ===
+${priorProjectsNote}
 `
     : ""
 }

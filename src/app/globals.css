@@ -237,6 +237,32 @@ button.primary {
   cursor: pointer;
 }
 
+button.primary:disabled,
+.link-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.danger {
+  padding: 9px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--status-critical);
+  background: none;
+  color: var(--status-critical);
+  font: inherit;
+  cursor: pointer;
+}
+
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+
 .error {
   color: var(--status-critical);
   font-size: 13px;

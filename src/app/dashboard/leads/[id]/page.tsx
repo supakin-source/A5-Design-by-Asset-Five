@@ -3,6 +3,8 @@ import Link from "next/link";
 import { MessageRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
+import { EditProject } from "./edit-project";
+import { MergeButton } from "./merge-button";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +70,23 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               </tbody>
             </table>
           </div>
+          <div style={{ marginTop: 12 }}>
+            <EditProject
+              project={{
+                id: project.id,
+                displayName: project.lead.displayName ?? "",
+                phone: project.phone ?? "",
+                projectType: project.projectType ?? "",
+                projectDetail: project.projectDetail ?? "",
+                budgetRange: project.budgetRange ?? "",
+                location: project.location ?? "",
+                timeline: project.timeline ?? "",
+                contactNote: project.contactNote ?? "",
+                notes: project.notes ?? "",
+                status: project.status,
+              }}
+            />
+          </div>
         </div>
 
         <div className="card">
@@ -99,6 +118,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                   <th>รายละเอียด</th>
                   <th>สถานะ</th>
                   <th>เข้ามาเมื่อ</th>
+                  <th>ถ้าเป็นงานเดียวกัน (ข้อมูลซ้ำ)</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,6 +132,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                       <span className="badge">{PROJECT_STATUS_LABEL[p.status]}</span>
                     </td>
                     <td>{formatDateTime(p.createdAt)}</td>
+                    <td>
+                      <MergeButton primaryProjectId={project.id} duplicateProjectId={p.id} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
