@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectStatus } from "@prisma/client";
-import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
+import { PROJECT_STATUS_LABEL } from "@/lib/format";
 
 interface EditableProject {
   id: string;
@@ -16,10 +16,9 @@ interface EditableProject {
   timeline: string;
   contactNote: string;
   status: ProjectStatus;
-  createdAt: Date;
 }
 
-const FIELD_LABELS: Array<[keyof Omit<EditableProject, "id" | "status" | "createdAt">, string]> = [
+const FIELD_LABELS: Array<[keyof Omit<EditableProject, "id" | "status">, string]> = [
   ["displayName", "ชื่อลูกค้า"],
   ["phone", "เบอร์ติดต่อ"],
   ["projectType", "ประเภทงาน"],
@@ -101,8 +100,8 @@ export function EditProject({ project }: { project: EditableProject }) {
   if (!editing) {
     return (
       <div className="card">
-        <h2>ข้อมูลลูกค้า</h2>
-        <p className="sub">ข้อมูลที่บอทเก็บได้จากบทสนทนา (งานนี้)</p>
+        <h2>ข้อมูลงานนี้</h2>
+        <p className="sub">บอทเก็บได้จากบทสนทนา</p>
         <div className="table-wrap">
           <table>
             <tbody>
@@ -112,14 +111,6 @@ export function EditProject({ project }: { project: EditableProject }) {
                   <td style={{ whiteSpace: "normal" }}>{project[key] || "—"}</td>
                 </tr>
               ))}
-              <tr>
-                <th style={{ width: 180 }}>สถานะ</th>
-                <td>{PROJECT_STATUS_LABEL[project.status]}</td>
-              </tr>
-              <tr>
-                <th style={{ width: 180 }}>เข้ามาเมื่อ</th>
-                <td>{formatDateTime(project.createdAt)}</td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -136,7 +127,7 @@ export function EditProject({ project }: { project: EditableProject }) {
   return (
     <div className="card">
       <h2>แก้ไขข้อมูล</h2>
-      <p className="sub">กด "บันทึก" หรือ "ลบงานนี้ถาวร" จะมีป็อปอัพให้กรอกรหัสผ่านยืนยันก่อนดำเนินการ</p>
+      <p className="sub">ต้องกรอกรหัสผ่านยืนยันก่อนบันทึกหรือลบ</p>
       <div className="table-wrap">
         <table>
           <tbody>

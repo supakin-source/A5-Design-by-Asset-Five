@@ -21,6 +21,15 @@ export interface CategoryDatum {
 
 const AXIS_STYLE = { fontSize: 12, fill: "var(--text-secondary)" } as const;
 
+const TOOLTIP_STYLE = {
+  background: "var(--surface-1)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  color: "var(--text-primary)",
+  fontSize: 12,
+  boxShadow: "var(--shadow-pop)",
+} as const;
+
 function ChartCard({
   title,
   subtitle,
@@ -38,7 +47,7 @@ function ChartCard({
 
   return (
     <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+      <div className="card-head">
         <div>
           <h2>{title}</h2>
           <p className="sub">{subtitle}</p>
@@ -49,7 +58,7 @@ function ChartCard({
       </div>
 
       {rows.length === 0 ? (
-        <p className="empty">ยังไม่มีข้อมูลเพียงพอสำหรับแสดงผล</p>
+        <p className="empty">ยังไม่มีข้อมูลในช่วงนี้</p>
       ) : showTable ? (
         <div className="table-wrap">
           <table>
@@ -103,17 +112,49 @@ export function CategoryBarChart({
           <YAxis type="category" dataKey="label" width={140} tick={AXIS_STYLE} stroke="var(--grid)" />
           <Tooltip
             formatter={(value) => [`${value ?? 0}`, valueLabel] as [string, string]}
-            contentStyle={{
-              background: "var(--surface-1)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              color: "var(--text-primary)",
-              fontSize: 12,
-            }}
+            contentStyle={TOOLTIP_STYLE}
           />
           <Bar dataKey="value" fill="var(--series-1)" radius={[0, 4, 4, 0]} barSize={16}>
             <LabelList dataKey="value" position="right" style={{ fontSize: 12, fill: "var(--text-secondary)" }} />
           </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// Hour-of-day distribution: time reads left-to-right, so this one is vertical
+// where the category charts are horizontal. 24 bars is too many to label
+// individually — the peak is called out as a stat above the chart instead,
+// and the rest is available on hover or in the table view.
+export function HourlyBarChart({
+  title,
+  subtitle,
+  data,
+  valueLabel = "ข้อความ",
+}: {
+  title: string;
+  subtitle: string;
+  data: Array<{ hour: number; value: number }>;
+  valueLabel?: string;
+}) {
+  const rows = data.map((d) => [`${String(d.hour).padStart(2, "0")}:00`, d.value] as [string, number]);
+  const plot = data.map((d) => ({ ...d, label: `${String(d.hour).padStart(2, "0")}` }));
+
+  return (
+    <ChartCard title={title} subtitle={subtitle} columns={["ช่วงเวลา", valueLabel]} rows={rows}>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={plot} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+          <CartesianGrid vertical={false} stroke="var(--grid)" />
+          <XAxis dataKey="label" tick={AXIS_STYLE} stroke="var(--grid)" interval={1} />
+          <YAxis tick={AXIS_STYLE} allowDecimals={false} width={32} stroke="var(--grid)" />
+          <Tooltip
+            cursor={{ fill: "var(--surface-2)" }}
+            labelFormatter={(label) => `${label}:00 - ${label}:59 น.`}
+            formatter={(value) => [`${value ?? 0}`, valueLabel] as [string, string]}
+            contentStyle={TOOLTIP_STYLE}
+          />
+          <Bar dataKey="value" fill="var(--series-1)" radius={[4, 4, 0, 0]} maxBarSize={18} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>
@@ -145,20 +186,16 @@ export function DailyLineChart({
           <YAxis tick={AXIS_STYLE} allowDecimals={false} width={32} stroke="var(--grid)" />
           <Tooltip
             formatter={(value) => [`${value ?? 0}`, valueLabel] as [string, string]}
-            contentStyle={{
-              background: "var(--surface-1)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              color: "var(--text-primary)",
-              fontSize: 12,
-            }}
+            contentStyle={TOOLTIP_STYLE}
           />
           <Line
             type="monotone"
             dataKey="value"
             stroke="var(--series-1)"
             strokeWidth={2}
-            dot={{ r: 3, strokeWidth: 0, fill: "var(--series-1)" }}
+            // A dot per day is useful at 7 or 30 days and pure noise at 90 —
+            // the hover marker still marks the point being read.
+            dot={data.length > 40 ? false : { r: 3, strokeWidth: 0, fill: "var(--series-1)" }}
             activeDot={{ r: 5, stroke: "var(--surface-1)", strokeWidth: 2 }}
           />
         </LineChart>

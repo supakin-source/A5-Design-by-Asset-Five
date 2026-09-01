@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "A5 Design LINE OA Chatbot",
-  description: "แชทบอท LINE OA และ dashboard ข้อมูลลูกค้า/market data ของ A5 Design by Asset Five",
+  title: "A5 Design Dashboard",
+  description: "ข้อมูลลูกค้าและ market data จาก LINE OA ของ A5 Design by Asset Five",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -16,6 +16,16 @@ const SETTLED_STATUSES: ProjectStatus[] = [ProjectStatus.HANDED_OFF, ProjectStat
 // while staying far short of "the customer came back another day".
 const NEW_VISIT_GAP_MS = 60 * 60 * 1000;
 
+// CLOSED is the exception: staff have marked the job finished, so anything
+// the customer says next is new business by definition and opens a fresh
+// project straight away, with no waiting period. HANDED_OFF and CONTACTED
+// still wait out the gap — that job may well be ongoing, and a follow-up
+// message about it belongs to the same project.
+export function startsNewProject(status: ProjectStatus, gapMs: number): boolean {
+  if (status === ProjectStatus.CLOSED) return true;
+  return SETTLED_STATUSES.includes(status) && gapMs >= NEW_VISIT_GAP_MS;
+}
+
 export async function getOrCreateLeadAndConversation(lineUserId: string, displayName?: string) {
   let lead = await prisma.lead.findUnique({ where: { lineUserId } });
   if (!lead) {
@@ -29,7 +39,7 @@ export async function getOrCreateLeadAndConversation(lineUserId: string, display
   });
   const lastActive = latest?.conversations[0]?.lastActive;
   const gapMs = lastActive ? Date.now() - lastActive.getTime() : Infinity;
-  const isNewVisit = latest ? SETTLED_STATUSES.includes(latest.status) && gapMs >= NEW_VISIT_GAP_MS : true;
+  const isNewVisit = latest ? startsNewProject(latest.status, gapMs) : true;
 
   let project: Project;
   if (isNewVisit) {

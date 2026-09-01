@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, PROJECT_STATUS_TONE, formatDateTime } from "@/lib/format";
+import { StatusActions } from "../status-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +14,13 @@ export default async function LeadsPage() {
 
   return (
     <>
-      <h1 style={{ fontSize: 20, marginTop: 0 }}>รายชื่อลูกค้า</h1>
+      <h1 style={{ marginTop: 0 }}>รายการงาน</h1>
       <div className="card">
-        <h2>การติดต่อเข้ารับบริการผ่าน LINE OA</h2>
         <p className="sub">
-          แสดงล่าสุด 200 รายการ • หนึ่งแถวคือหนึ่งงานที่ลูกค้าติดต่อเข้ามา ลูกค้าคนเดิมที่กลับมาขอรับบริการใหม่
-          จะมีอีกแถวแยกไว้ ไม่ทับข้อมูลงานเดิม • คลิกเพื่อดูบทสนทนาทั้งหมด
+          200 รายการล่าสุด · หนึ่งแถวคือหนึ่งงาน ลูกค้าเดิมที่กลับมาติดต่อใหม่จะขึ้นเป็นแถวใหม่ ไม่ทับงานเดิม
         </p>
         {projects.length === 0 ? (
-          <p className="empty">ยังไม่มีข้อมูลลูกค้าเข้ามา</p>
+          <p className="empty">ยังไม่มีงานเข้ามา</p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -32,10 +31,9 @@ export default async function LeadsPage() {
                   <th>ประเภทงาน</th>
                   <th>รายละเอียด</th>
                   <th>งบประมาณ</th>
-                  <th>พื้นที่</th>
-                  <th>กรอบเวลา</th>
                   <th>สถานะ</th>
                   <th>เข้ามาเมื่อ</th>
+                  <th>อัปเดตสถานะ</th>
                 </tr>
               </thead>
               <tbody>
@@ -43,19 +41,22 @@ export default async function LeadsPage() {
                   <tr key={project.id}>
                     <td>
                       <Link href={`/dashboard/leads/${project.id}`}>
-                        {project.lead.displayName ?? "(ไม่ระบุชื่อ)"}
+                        {project.lead.displayName ?? "ไม่ระบุชื่อ"}
                       </Link>
                     </td>
                     <td>{project.phone ?? "—"}</td>
                     <td>{project.projectType ?? "—"}</td>
-                    <td style={{ whiteSpace: "normal", maxWidth: 260 }}>{project.projectDetail ?? "—"}</td>
+                    <td style={{ whiteSpace: "normal", maxWidth: 240 }}>{project.projectDetail ?? "—"}</td>
                     <td>{project.budgetRange ?? "—"}</td>
-                    <td>{project.location ?? "—"}</td>
-                    <td>{project.timeline ?? "—"}</td>
                     <td>
-                      <span className="badge">{PROJECT_STATUS_LABEL[project.status]}</span>
+                      <span className={`badge ${PROJECT_STATUS_TONE[project.status]}`}>
+                        {PROJECT_STATUS_LABEL[project.status]}
+                      </span>
                     </td>
                     <td>{formatDateTime(project.createdAt)}</td>
+                    <td>
+                      <StatusActions projectId={project.id} status={project.status} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

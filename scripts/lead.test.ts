@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatKnownFields, formatPriorProjectsNote, hasEnoughInfoForHandoff } from "../src/lib/lead";
+import {
+  formatKnownFields,
+  formatPriorProjectsNote,
+  hasEnoughInfoForHandoff,
+  startsNewProject,
+} from "../src/lib/lead";
 import { ProjectStatus, type Lead, type Project } from "@prisma/client";
 
 const BASE_PROJECT: Project = {
@@ -54,6 +59,25 @@ test("formatPriorProjectsNote lists each prior project and tells the model to co
   assert.match(note!, /ต่อเติม \/ ต่อเติมครัวหลังบ้าน \/ นนทบุรี/);
   assert.match(note!, /ถามยืนยัน/);
   assert.match(note!, /needsHuman = true/);
+});
+
+test("a closed job reopens as a new project immediately; the rest wait out the gap", () => {
+  const seconds = 30 * 1000;
+  const twoHours = 2 * 60 * 60 * 1000;
+
+  // Staff marked it finished, so the next message is new business — no wait.
+  assert.equal(startsNewProject(ProjectStatus.CLOSED, seconds), true);
+  assert.equal(startsNewProject(ProjectStatus.CLOSED, twoHours), true);
+
+  // Still-live jobs: a customer who keeps chatting stays on the same project,
+  // which is what stops the mid-conversation duplicate-row bug.
+  assert.equal(startsNewProject(ProjectStatus.HANDED_OFF, seconds), false);
+  assert.equal(startsNewProject(ProjectStatus.CONTACTED, seconds), false);
+  assert.equal(startsNewProject(ProjectStatus.HANDED_OFF, twoHours), true);
+  assert.equal(startsNewProject(ProjectStatus.CONTACTED, twoHours), true);
+
+  // A job still being filled in is never split, however long the pause.
+  assert.equal(startsNewProject(ProjectStatus.NEW, twoHours), false);
 });
 
 test("hasEnoughInfoForHandoff needs both a phone and a project type", () => {

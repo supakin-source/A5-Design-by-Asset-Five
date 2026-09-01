@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, PROJECT_STATUS_TONE, formatDateTime } from "@/lib/format";
+import { StatusActions } from "./status-actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  // "ลูกค้า" counts unique customers (Lead); handoff/contact status and the
-  // recent-activity table are per service request (Project) — a returning
-  // customer's second inquiry is a separate row there, not a repeat of the
-  // first.
-  const [total, newThisWeek, totalProjects, handedOff, pendingContact, recentProjects] = await Promise.all([
+  // "ลูกค้า" counts unique customers (Lead); status counts and the recent
+  // activity table are per job (Project) — a returning customer's second
+  // inquiry is a separate row there, not a repeat of the first.
+  const [customers, newCustomers, totalJobs, handedOff, waitingCallback, recentProjects] = await Promise.all([
     prisma.lead.count(),
     prisma.lead.count({ where: { createdAt: { gte: since } } }),
     prisma.project.count(),
@@ -23,36 +23,36 @@ export default async function OverviewPage() {
     prisma.project.findMany({ include: { lead: true }, orderBy: { updatedAt: "desc" }, take: 10 }),
   ]);
 
-  const handoffRate = totalProjects > 0 ? Math.round((handedOff / totalProjects) * 100) : 0;
+  const handoffRate = totalJobs > 0 ? Math.round((handedOff / totalJobs) * 100) : 0;
 
   return (
     <>
-      <h1 style={{ fontSize: 20, marginTop: 0 }}>ภาพรวม</h1>
+      <h1 style={{ marginTop: 0 }}>ภาพรวม</h1>
 
       <div className="grid kpi" style={{ marginBottom: 24 }}>
         <div className="card">
-          <div className="kpi-value">{total}</div>
-          <div className="kpi-label">ลูกค้าที่ติดต่อเข้ามาทั้งหมด</div>
+          <div className="kpi-value">{waitingCallback}</div>
+          <div className="kpi-label">รอติดต่อกลับ</div>
         </div>
         <div className="card">
-          <div className="kpi-value">{newThisWeek}</div>
-          <div className="kpi-label">รายใหม่ใน 7 วันล่าสุด</div>
+          <div className="kpi-value">{newCustomers}</div>
+          <div className="kpi-label">ลูกค้าใหม่ใน 7 วัน</div>
         </div>
         <div className="card">
-          <div className="kpi-value">{pendingContact}</div>
-          <div className="kpi-label">รอทีมงานติดต่อกลับ</div>
+          <div className="kpi-value">{customers}</div>
+          <div className="kpi-label">ลูกค้าทั้งหมด</div>
         </div>
         <div className="card">
           <div className="kpi-value">{handoffRate}%</div>
-          <div className="kpi-label">สัดส่วนที่เก็บข้อมูลได้ครบจนส่งต่อทีมงาน</div>
+          <div className="kpi-label">งานที่เก็บข้อมูลครบจนส่งต่อทีมงานได้</div>
         </div>
       </div>
 
       <div className="card">
         <h2>ความเคลื่อนไหวล่าสุด</h2>
-        <p className="sub">10 รายการที่มีการอัปเดตล่าสุด</p>
+        <p className="sub">10 งานที่อัปเดตล่าสุด</p>
         {recentProjects.length === 0 ? (
-          <p className="empty">ยังไม่มีข้อมูลลูกค้าเข้ามา</p>
+          <p className="empty">ยังไม่มีงานเข้ามา</p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -63,20 +63,26 @@ export default async function OverviewPage() {
                   <th>เบอร์ติดต่อ</th>
                   <th>สถานะ</th>
                   <th>อัปเดต</th>
+                  <th>อัปเดตสถานะ</th>
                 </tr>
               </thead>
               <tbody>
                 {recentProjects.map((project) => (
                   <tr key={project.id}>
                     <td>
-                      <Link href={`/dashboard/leads/${project.id}`}>{project.lead.displayName ?? "(ไม่ระบุชื่อ)"}</Link>
+                      <Link href={`/dashboard/leads/${project.id}`}>{project.lead.displayName ?? "ไม่ระบุชื่อ"}</Link>
                     </td>
                     <td>{project.projectType ?? "—"}</td>
                     <td>{project.phone ?? "—"}</td>
                     <td>
-                      <span className="badge">{PROJECT_STATUS_LABEL[project.status]}</span>
+                      <span className={`badge ${PROJECT_STATUS_TONE[project.status]}`}>
+                        {PROJECT_STATUS_LABEL[project.status]}
+                      </span>
                     </td>
                     <td>{formatDateTime(project.updatedAt)}</td>
+                    <td>
+                      <StatusActions projectId={project.id} status={project.status} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

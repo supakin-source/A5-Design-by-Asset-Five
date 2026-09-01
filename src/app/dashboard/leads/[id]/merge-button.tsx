@@ -12,7 +12,7 @@ export function MergeButton({ primaryProjectId, duplicateProjectId }: { primaryP
 
   async function merge() {
     const adminPassword = window.prompt(
-      "พิมพ์รหัสผ่านยืนยันเพื่อ merge งานนี้เข้ากับงานที่กำลังดูอยู่ (บทสนทนา/การแจ้งเตือนจะถูกย้ายมา แล้วงานนี้จะถูกลบ):",
+      "กรอกรหัสผ่านยืนยันเพื่อรวมงานนี้เข้ากับงานที่กำลังดูอยู่ (บทสนทนาและการแจ้งเตือนจะถูกย้ายมา แล้วงานนี้จะถูกลบ):",
     );
     if (adminPassword === null) return; // cancelled
     if (!adminPassword) {
@@ -28,7 +28,7 @@ export function MergeButton({ primaryProjectId, duplicateProjectId }: { primaryP
         body: JSON.stringify({ duplicateProjectId, adminPassword }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "merge ไม่สำเร็จ");
+      if (!res.ok) throw new Error(body.error ?? "รวมงานไม่สำเร็จ");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -39,7 +39,7 @@ export function MergeButton({ primaryProjectId, duplicateProjectId }: { primaryP
   return (
     <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
       <button className="link-button" onClick={merge} disabled={busy}>
-        merge เข้ากับงานนี้
+        รวมกับงานนี้
       </button>
       {error && <span style={{ color: "var(--status-critical)", fontSize: 12 }}>{error}</span>}
     </span>

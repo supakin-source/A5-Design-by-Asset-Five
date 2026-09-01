@@ -5,7 +5,7 @@ import { prisma } from "./db";
 // here so the business can check "which login touched this, and when".
 export async function logAudit(params: {
   username: string;
-  action: "update" | "delete" | "merge";
+  action: "update" | "delete" | "merge" | "status";
   targetType: "Project";
   targetId: string;
   detail: string;

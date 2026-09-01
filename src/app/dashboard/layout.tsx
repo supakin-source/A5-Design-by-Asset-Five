@@ -4,12 +4,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="shell">
       <header className="topbar">
-        <nav className="nav">
-          <Link href="/dashboard">ภาพรวม</Link>
-          <Link href="/dashboard/leads">รายชื่อลูกค้า</Link>
-          <Link href="/dashboard/analytics">Market data</Link>
-          <Link href="/dashboard/audit-log">ประวัติการแก้ไข</Link>
-        </nav>
+        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <Link href="/dashboard" className="brandmark">
+            A5 Design
+          </Link>
+          <nav className="nav">
+            <Link href="/dashboard">ภาพรวม</Link>
+            <Link href="/dashboard/leads">รายการงาน</Link>
+            <Link href="/dashboard/analytics">Market data</Link>
+            <Link href="/dashboard/audit-log">ประวัติการแก้ไข</Link>
+          </nav>
+        </div>
         <form action="/api/auth/logout" method="post">
           <button className="link-button" type="submit">
             ออกจากระบบ
