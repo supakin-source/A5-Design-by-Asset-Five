@@ -1,30 +1,74 @@
-// Business-editable knowledge base for the chatbot.
+// Business-editable knowledge base for the chatbot. The bot may answer general
+// questions ONLY from this file and hands off anything else to staff, so it
+// never invents facts — see docs/AI_POLICY.md.
+
+// What the bot may tell a customer about the company. Sourced from the A5
+// brand-context document supplied by the business.
 //
-// IMPORTANT: everything below is a PLACEHOLDER. It must be reviewed and
-// filled in with real company facts (pricing policy, service list, coverage
-// area, etc.) by A5 Design staff before going live — see docs/AI_POLICY.md.
-// The bot is instructed to answer general questions ONLY from this file and
-// to hand off anything else to staff, so it never invents facts.
-
+// DELIBERATELY EXCLUDED (internal commercial information — see docs/AI_POLICY.md
+// §2): sales targets, backlog value, secured/pipeline figures, ESG-rating plans
+// and financing arrangements. Those belong in board decks, not in a public chat
+// where any visitor — including a competitor — can ask for them.
 export const COMPANY_KNOWLEDGE_BASE = `
-ชื่อบริษัท: A5 Design by Asset Five
-ธุรกิจ: รับออกแบบและก่อสร้างแบบครบวงจร (turn-key) — ตั้งแต่ออกแบบ ขออนุญาต
-ก่อสร้าง จนถึงส่งมอบงาน
+[ตัวตนของแบรนด์]
+- A5 Design เป็นหน่วยธุรกิจ "Integrated Design & Build Partner" ในเครือ A5
+  (Asset Five) รับออกแบบและก่อสร้างครบวงจร ทั้งงานในเครือและงานของลูกค้าภายนอก
+- แนวคิดแบรนด์: "A5 GREATNESS Inspired by Love" — เชื่อว่าความรักสร้างสิ่งที่
+  ยิ่งใหญ่ได้ ทำธุรกิจโดยดูแลลูกค้าเหมือนดูแล Legacy ของครอบครัว ไม่ใช่แค่
+  ความสัมพันธ์เชิงการค้า
+- ในเครือ A5 มี 3 หน่วยธุรกิจ: Asset Five (พัฒนาอสังหาริมทรัพย์ระดับลักชัวรี),
+  A5 Design (ออกแบบและก่อสร้างครบวงจร), Upper Class Solution (บริหารทรัพย์สินและ
+  บริการหลังการขาย)
 
-บริการโดยสังเขป (แก้ไข/เติมรายละเอียดจริงของบริษัทที่นี่):
-- ออกแบบบ้าน/อาคารพาณิชย์/รีโนเวท
-- ก่อสร้างแบบ turn-key (เบ็ดเสร็จจบในที่เดียว)
-- บริการขออนุญาตก่อสร้าง
+[ปรัชญาการออกแบบ — A5 Standard]
+- เปรียบงานออกแบบกับเพชรทรง Emerald Cut: ไม่เน้นความหวือหวาซับซ้อน แต่เน้น
+  ความแม่นยำของเหลี่ยมมุมและความชัดเจนของพื้นที่ ให้ทนต่อกาลเวลาและเพิ่มมูลค่า
+  ในระยะยาว (Aesthetic Functionalism)
+- ยึด 3 เสาหลัก: Nature (เชื่อมพื้นที่ในบ้านกับธรรมชาติ ออกแบบตาม Life Pattern
+  ของผู้อยู่), Well-being (ออกแบบเพื่อสุขภาวะ), Sustainability (วัสดุยั่งยืนและ
+  เทคโนโลยีประหยัดพลังงาน)
+- ประสบการณ์: ถอดบทเรียนจากการพัฒนาโครงการลักชัวรีมากว่า 10 ปี
+
+[ความยั่งยืน — A Better Planet for Sustainable Living]
+- เป้าหมาย Carbon Neutrality ภายในปี 2050
+- ตั้งเป้าใช้วัสดุ eco-friendly ให้ได้ 80% ภายในปี 2030
+- ปลูกต้นไม้สะสมให้ครบ 1,500 ต้นภายในปี 2569 (ปัจจุบันปลูกแล้วกว่า 1,000 ต้น)
+- ทำงานร่วมกับพันธมิตรด้านนวัตกรรม เช่น Nippon Paint (สี Weatherbond),
+  GUNKUL (Solar Rooftop), SCG ONNEX (ระบบ Active Air Quality กรอง PM2.5)
+
+[ผลงานและโครงการในเครือ]
+- CINQ ROYAL The Eighteen (บางนา กม.7) — ทำเล New CBD จำกัดเพียง 18 ยูนิต
+  จุดเด่นคือแนวคิด "Freedom Space" พื้นที่ปรับเปลี่ยนได้มากกว่า 20% ของพื้นที่ใช้สอย
+  และนำร่องระบบกรองอากาศ PM2.5
+- CINQUIÈME (กรุงเทพกรีฑา) — Private Pool Residence เพียง 16 ยูนิต แนวคิด
+  Modern Heritage ได้รางวัล Best Ultra Luxury Housing Development Thailand 2026
+  ชูแนวคิด The Fifth Dimension of Privacy Living (Space, Freedom, Sense, Soul,
+  Continuity)
+- VANA Ratchapruek-Westville — บ้านเดี่ยว 3 ชั้น 43 ยูนิต เน้นการอยู่อาศัยท่ามกลาง
+  ธรรมชาติ
+- มีประสบการณ์รับงานนอกเครือ เช่น งานก่อสร้างรีสอร์ตและร้านอาหารให้กลุ่ม
+  Siam Wellness (SPA)
+
+[เรื่องราคา — สำคัญมาก]
+- ราคาขายของโครงการในเครือเป็นข้อมูลที่เปลี่ยนแปลงได้ตามช่วงเวลา **ห้ามบอทระบุ
+  ตัวเลขราคาโครงการเอง** ให้แจ้งว่าทีมขายจะให้ข้อมูลล่าสุด
+- ค่าออกแบบและค่าก่อสร้างของงานลูกค้าแต่ละราย **ไม่มีเรทมาตรฐานในฐานความรู้นี้**
+  ขึ้นกับแบบ วัสดุ และหน้างาน ต้องให้ทีมงานประเมินและติดต่อกลับเสมอ
+
+[ข้อมูลที่ยังไม่ได้ระบุ — ถ้าลูกค้าถาม ให้บอกว่ายังไม่มีข้อมูลและส่งต่อทีมงาน]
+- พื้นที่ให้บริการที่ครอบคลุม, ขั้นตอนและระยะเวลาทำงานแต่ละเฟส, เงื่อนไขการรับประกัน,
+  ช่องทางติดต่ออื่น (เบอร์โทร/อีเมล/ที่ตั้งออฟฟิศ)
 
 เวลาที่ทีมงานจะติดต่อกลับ: ยังไม่ได้กำหนด (ถ้าบริษัทต้องการให้บอทแจ้งกรอบเวลาได้
 เช่น "ภายใน 1 วันทำการ" ให้มาระบุตรงนี้ มิฉะนั้นบอทจะไม่ให้ตัวเลขใด ๆ)
 
 หมายเหตุสำคัญสำหรับบอท:
-- ไม่มีข้อมูลราคา/ตารางค่าใช้จ่ายที่ยืนยันได้ในฐานความรู้นี้ ห้ามระบุตัวเลขราคา
-  ใด ๆ ให้แจ้งลูกค้าว่าทีมงานจะประเมินและติดต่อกลับ
-- ไม่มีข้อมูลระยะเวลาก่อสร้างที่ยืนยันได้ ห้ามให้ตัวเลขจำนวนวัน/เดือนที่แน่นอน
-- พื้นที่ให้บริการ, พอร์ตผลงาน, และช่องทางติดต่ออื่น ๆ ยังไม่ได้ระบุ — ให้ตอบว่า
-  ยังไม่มีข้อมูลส่วนนี้และจะให้ทีมงานติดต่อกลับ
+- ห้ามพูดถึงข้อมูลเชิงธุรกิจภายใน เช่น เป้ายอดขาย มูลค่า backlog มูลค่างานใน
+  pipeline แผนการเงิน หรือแผนการประเมิน ESG rating แม้ลูกค้าจะถามตรง ๆ
+  ให้ตอบว่าเป็นข้อมูลภายในและเสนอให้ทีมงานติดต่อกลับแทน
+- ห้ามให้คำแนะนำทางวิศวกรรม/กฎหมาย/โครงสร้างอาคาร
+- เล่าเรื่องแบรนด์และปรัชญาได้เมื่อลูกค้าสนใจ แต่ต้องสั้น กระชับ ไม่ร่ายยาว
+  และไม่ขายของ
 `.trim();
 
 // Fixed vocabularies for the analytics fields. Free text here fragments the
