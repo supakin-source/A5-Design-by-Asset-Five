@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProjectStatus } from "@prisma/client";
-import { PROJECT_STATUS_LABEL } from "@/lib/format";
+import { PROJECT_STATUS_LABEL, formatDateTime } from "@/lib/format";
 
 interface EditableProject {
   id: string;
@@ -16,9 +16,10 @@ interface EditableProject {
   timeline: string;
   contactNote: string;
   status: ProjectStatus;
+  createdAt: Date;
 }
 
-const FIELD_LABELS: Array<[keyof Omit<EditableProject, "id" | "status">, string]> = [
+const FIELD_LABELS: Array<[keyof Omit<EditableProject, "id" | "status" | "createdAt">, string]> = [
   ["displayName", "ชื่อลูกค้า"],
   ["phone", "เบอร์ติดต่อ"],
   ["projectType", "ประเภทงาน"],
@@ -29,12 +30,21 @@ const FIELD_LABELS: Array<[keyof Omit<EditableProject, "id" | "status">, string]
   ["contactNote", "ช่วงเวลาที่สะดวกติดต่อ"],
 ];
 
+// Renders the "ข้อมูลลูกค้า" card in either view mode or edit mode — one card
+// that swaps its own content in place, rather than opening a second card
+// alongside it.
 export function EditProject({ project }: { project: EditableProject }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(project);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function startEditing() {
+    setForm(project);
+    setError(null);
+    setEditing(true);
+  }
 
   async function save() {
     const adminPassword = window.prompt("กรอกรหัสผ่านยืนยันการบันทึกข้อมูล:");
@@ -53,7 +63,7 @@ export function EditProject({ project }: { project: EditableProject }) {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "แก้ไขไม่สำเร็จ");
-      setOpen(false);
+      setEditing(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -88,16 +98,43 @@ export function EditProject({ project }: { project: EditableProject }) {
     }
   }
 
-  if (!open) {
+  if (!editing) {
     return (
-      <button className="link-button" onClick={() => setOpen(true)}>
-        แก้ไขข้อมูล
-      </button>
+      <div className="card">
+        <h2>ข้อมูลลูกค้า</h2>
+        <p className="sub">ข้อมูลที่บอทเก็บได้จากบทสนทนา (งานนี้)</p>
+        <div className="table-wrap">
+          <table>
+            <tbody>
+              {FIELD_LABELS.map(([key, label]) => (
+                <tr key={key}>
+                  <th style={{ width: 180 }}>{label}</th>
+                  <td style={{ whiteSpace: "normal" }}>{project[key] || "—"}</td>
+                </tr>
+              ))}
+              <tr>
+                <th style={{ width: 180 }}>สถานะ</th>
+                <td>{PROJECT_STATUS_LABEL[project.status]}</td>
+              </tr>
+              <tr>
+                <th style={{ width: 180 }}>เข้ามาเมื่อ</th>
+                <td>{formatDateTime(project.createdAt)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {error && <p style={{ color: "var(--status-critical)" }}>{error}</p>}
+        <div style={{ marginTop: 12 }}>
+          <button className="link-button" onClick={startEditing}>
+            แก้ไขข้อมูล
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="card" style={{ marginTop: 12 }}>
+    <div className="card">
       <h2>แก้ไขข้อมูล</h2>
       <p className="sub">กด "บันทึก" หรือ "ลบงานนี้ถาวร" จะมีป็อปอัพให้กรอกรหัสผ่านยืนยันก่อนดำเนินการ</p>
       <div className="table-wrap">
@@ -116,7 +153,7 @@ export function EditProject({ project }: { project: EditableProject }) {
               </tr>
             ))}
             <tr>
-              <th>สถานะ</th>
+              <th style={{ width: 180 }}>สถานะ</th>
               <td>
                 <select
                   value={form.status}
@@ -141,7 +178,7 @@ export function EditProject({ project }: { project: EditableProject }) {
         <button
           className="link-button"
           onClick={() => {
-            setOpen(false);
+            setEditing(false);
             setError(null);
           }}
           disabled={busy}

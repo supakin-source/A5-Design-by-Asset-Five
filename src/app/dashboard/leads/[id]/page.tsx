@@ -35,19 +35,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     orderBy: { createdAt: "desc" },
   });
 
-  const details: Array<[string, string]> = [
-    ["ชื่อ", project.lead.displayName ?? "—"],
-    ["เบอร์ติดต่อ", project.phone ?? "—"],
-    ["ประเภทงาน", project.projectType ?? "—"],
-    ["รายละเอียดงาน", project.projectDetail ?? "—"],
-    ["งบประมาณ", project.budgetRange ?? "—"],
-    ["พื้นที่/ทำเล", project.location ?? "—"],
-    ["กรอบเวลา", project.timeline ?? "—"],
-    ["ช่วงเวลาที่สะดวกติดต่อ", project.contactNote ?? "—"],
-    ["สถานะ", PROJECT_STATUS_LABEL[project.status]],
-    ["เข้ามาเมื่อ", formatDateTime(project.createdAt)],
-  ];
-
   const messages = project.conversations.flatMap((c) => c.messages);
 
   return (
@@ -55,38 +42,21 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       <h1 style={{ fontSize: 20, marginTop: 0 }}>{project.lead.displayName ?? "(ไม่ระบุชื่อ)"}</h1>
 
       <div className="grid two">
-        <div className="card">
-          <h2>ข้อมูลลูกค้า</h2>
-          <p className="sub">ข้อมูลที่บอทเก็บได้จากบทสนทนา (งานนี้)</p>
-          <div className="table-wrap">
-            <table>
-              <tbody>
-                {details.map(([label, value]) => (
-                  <tr key={label}>
-                    <th style={{ width: 180 }}>{label}</th>
-                    <td style={{ whiteSpace: "normal" }}>{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <EditProject
-              project={{
-                id: project.id,
-                displayName: project.lead.displayName ?? "",
-                phone: project.phone ?? "",
-                projectType: project.projectType ?? "",
-                projectDetail: project.projectDetail ?? "",
-                budgetRange: project.budgetRange ?? "",
-                location: project.location ?? "",
-                timeline: project.timeline ?? "",
-                contactNote: project.contactNote ?? "",
-                status: project.status,
-              }}
-            />
-          </div>
-        </div>
+        <EditProject
+          project={{
+            id: project.id,
+            displayName: project.lead.displayName ?? "",
+            phone: project.phone ?? "",
+            projectType: project.projectType ?? "",
+            projectDetail: project.projectDetail ?? "",
+            budgetRange: project.budgetRange ?? "",
+            location: project.location ?? "",
+            timeline: project.timeline ?? "",
+            contactNote: project.contactNote ?? "",
+            status: project.status,
+            createdAt: project.createdAt,
+          }}
+        />
 
         <div className="card">
           <h2>การแจ้งเตือนทีมงาน</h2>
