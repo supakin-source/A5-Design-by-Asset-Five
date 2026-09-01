@@ -258,7 +258,7 @@ npm run test:chat -- --duration=2h --budget=60
 รันบน GitHub Actions ได้เช่นกัน (ช่อง duration/budget ในหน้า Run workflow) แต่ระวัง
 โควตา Actions: รัน 2 ชม. = ใช้ 120 นาทีจากโควตาฟรี 2,000 นาที/เดือนของ repo แบบ private
 
-> ⚠️ workflow มี `schedule` ตั้งรันเองทุกวัน 12:00 น. (05:00 UTC) แบบ 2 ชม./60 request
+> ⚠️ workflow มี `schedule` ตั้งรันเองทุกวัน 12:00 น. (05:00 UTC) แบบ 2 ชม./30 request (2 รอบ)
 > ซึ่งจะกิน Actions ~3,600 นาที/เดือน **เกินโควตาฟรี** — ตั้งไว้ชั่วคราวสำหรับรอบทดสอบ
 > เมื่อไม่ต้องการแล้วให้ลบ block `schedule:` ใน `.github/workflows/chat-test.yml`
 

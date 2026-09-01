@@ -65,4 +65,4 @@ jobs:
           # Blank falls through to the code default, so the input can be left empty.
           GEMINI_MODEL: ${{ inputs.model }}
           # A scheduled run has no inputs, so it carries the soak settings here.
-          SOAK_ARGS: ${{ github.event_name == 'schedule' && '--duration=2h --budget=60' || '' }}
+          SOAK_ARGS: ${{ github.event_name == 'schedule' && '--duration=2h --budget=30' || '' }}
