@@ -14,10 +14,17 @@ on:
         description: "รันเฉพาะ scenario ที่ชื่อมีคำนี้ (เว้นว่าง = รันทั้งหมด ~15 request)"
         required: false
         type: string
-      gap_ms:
-        description: "เว้นจังหวะระหว่าง request (มิลลิวินาที) กัน rate limit ต่อนาที — ค่าเริ่มต้น 5000"
+      duration:
+        description: "รันวนซ้ำยาว ๆ เช่น 2h, 90m (เว้นว่าง = รันรอบเดียว) — ต้องใส่ budget ด้วย"
         required: false
-        default: "5000"
+        type: string
+      budget:
+        description: "เพดานจำนวน request ทั้งรัน เช่น 60 (เว้นว่าง = ไม่จำกัด)"
+        required: false
+        type: string
+      gap_ms:
+        description: "เว้นจังหวะระหว่าง request (มิลลิวินาที) เว้นว่างให้คำนวณเองจาก duration/budget"
+        required: false
         type: string
       ai_customer:
         description: "ให้ AI ด้นบทลูกค้าเอง (สมจริงกว่า แต่ใช้โควตาเกือบสองเท่า)"
@@ -41,7 +48,14 @@ jobs:
         run: npm ci
 
       - name: Talk to the bot
-        run: npm run test:chat -- "${{ inputs.scenario }}" "--gap=${{ inputs.gap_ms }}" ${{ inputs.ai_customer && '--ai-customer' || '' }}
+        # A soak run must outlive the default job timeout.
+        timeout-minutes: 360
+        run: |
+          npm run test:chat -- "${{ inputs.scenario }}" \
+            ${{ inputs.duration && format('--duration={0}', inputs.duration) || '' }} \
+            ${{ inputs.budget && format('--budget={0}', inputs.budget) || '' }} \
+            ${{ inputs.gap_ms && format('--gap={0}', inputs.gap_ms) || '' }} \
+            ${{ inputs.ai_customer && '--ai-customer' || '' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Blank falls through to the code default, so the input can be left empty.

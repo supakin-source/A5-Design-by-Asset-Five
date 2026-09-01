@@ -131,8 +131,36 @@ const budget = budgetArg ? Number(budgetArg.split("=")[1]) : Infinity;
 // Free tiers cap requests per minute as well as per day, and a scripted run
 // fires far faster than a real conversation would. Pacing keeps a run from
 // tripping the per-minute limit while its daily allowance is still intact.
+//
+// gemini-3.1-flash-lite is documented at 15 requests/minute, so 5s between
+// requests (12/min) leaves headroom for the retry a refusal triggers.
+const DEFAULT_GAP_MS = 5000;
 const gapArg = args.find((a) => a.startsWith("--gap="));
-const GAP_MS = gapArg ? Number(gapArg.split("=")[1]) : 5000;
+
+// Soak mode: keep cycling the scenarios for this long, spreading requests out.
+// Repetition is the point — it catches a model that follows the policy on one
+// run and breaks it on the next.
+const durationArg = args.find((a) => a.startsWith("--duration="));
+const durationMs = durationArg ? parseDuration(durationArg.split("=")[1]) : 0;
+
+function parseDuration(value: string): number {
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*(h|m|s)?$/i);
+  if (!match) {
+    console.error(`ค่า --duration ไม่ถูกต้อง: "${value}" (ตัวอย่าง: 2h, 90m, 3600s)`);
+    process.exit(2);
+  }
+  const amount = Number(match[1]);
+  const unit = (match[2] ?? "m").toLowerCase();
+  return amount * (unit === "h" ? 3_600_000 : unit === "s" ? 1_000 : 60_000);
+}
+
+// With a duration and a budget, spread the budget evenly across the window so
+// the run ends on time and never bunches requests up against the per-minute cap.
+const GAP_MS = gapArg
+  ? Number(gapArg.split("=")[1])
+  : durationMs && Number.isFinite(budget)
+    ? Math.max(DEFAULT_GAP_MS, Math.floor(durationMs / budget))
+    : DEFAULT_GAP_MS;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let lastRequestAt = 0;
 
@@ -204,12 +232,18 @@ function formatViolations(violations: Violation[]): string {
     .join("\n");
 }
 
-async function runScenario(scenario: Scenario): Promise<boolean> {
+interface ScenarioResult {
+  passed: boolean;
+  rules: string[];
+}
+
+async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
   console.log(`\n${"─".repeat(72)}\n▶ ${scenario.name}`);
 
   const history: ChatTurn[] = [];
   const transcript: string[] = [];
   const state: ConversationState = { replies: [], customerMessages: [] };
+  const rules: string[] = [];
   let errors = 0;
 
   for (let turn = 0; turn < scenario.script.length; turn++) {
@@ -268,6 +302,7 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
     if (violations.length) {
       console.log(formatViolations(violations));
       errors += violations.filter((v) => v.severity === "error").length;
+      rules.push(...violations.filter((v) => v.severity === "error").map((v) => v.rule));
     }
 
     history.push({ role: "user", text: customerText });
@@ -278,9 +313,10 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
   const expectationFailures = scenario.expect?.(state) ?? [];
   for (const failure of expectationFailures) console.log(`      ❌ [expect] ${failure}`);
   errors += expectationFailures.length;
+  rules.push(...expectationFailures.map(() => "expect"));
 
   console.log(errors === 0 ? "   ✅ ผ่าน" : `   ❌ ไม่ผ่าน (${errors} ข้อ)`);
-  return errors === 0;
+  return { passed: errors === 0, rules };
 }
 
 // Anything that is not a spent quota: usually a model id this key cannot use.
@@ -316,6 +352,35 @@ function reportQuotaExhausted(quota: QuotaExhausted, done: number, total: number
   console.error("       บอทจะตอบข้อความสำรองให้ลูกค้าจนกว่าโควตาจะรีเซ็ต");
 }
 
+interface Tally {
+  runs: number;
+  passes: number;
+  rules: Map<string, number>;
+}
+
+function printSummary(tally: Map<string, Tally>, startedAt: number, rounds: number) {
+  const elapsedMin = Math.round((Date.now() - startedAt) / 60_000);
+  console.log(`\n${"═".repeat(72)}`);
+  console.log(`สรุปผล · ${rounds} รอบ · ${elapsedMin} นาที · ใช้ไป ${totalRequests()} Gemini request`);
+  console.log(`โมเดล: ${resolveModels().primary}\n`);
+
+  for (const [name, t] of tally) {
+    const rate = t.runs ? Math.round((t.passes / t.runs) * 100) : 0;
+    const mark = t.passes === t.runs ? "✅" : t.passes === 0 ? "❌" : "⚠️ ";
+    console.log(`  ${mark} ${name} — ผ่าน ${t.passes}/${t.runs} (${rate}%)`);
+    for (const [rule, count] of [...t.rules].sort((a, b) => b[1] - a[1])) {
+      console.log(`        ผิดกฎ [${rule}] ${count} ครั้ง`);
+    }
+  }
+
+  const totals = [...tally.values()].reduce(
+    (acc, t) => ({ runs: acc.runs + t.runs, passes: acc.passes + t.passes }),
+    { runs: 0, passes: 0 },
+  );
+  console.log(`\nรวม ${totals.passes}/${totals.runs} รอบผ่าน`);
+  return totals;
+}
+
 async function main() {
   const scenarios = filter ? SCENARIOS.filter((s) => s.name.includes(filter)) : SCENARIOS;
 
@@ -326,39 +391,69 @@ async function main() {
   }
 
   const turnCount = scenarios.reduce((sum, s) => sum + s.script.length, 0);
-  const estimate = useAiCustomer ? turnCount * 2 - scenarios.length : turnCount;
+  const perRound = useAiCustomer ? turnCount * 2 - scenarios.length : turnCount;
   const { primary, fallback } = resolveModels();
-  console.log(`โมเดลที่ทดสอบ: ${primary} (สำรอง: ${fallback})`);
-  console.log(
-    `จะรัน ${scenarios.length} scenario · ใช้ประมาณ ${estimate} Gemini request` +
-      (Number.isFinite(budget) ? ` (เพดาน ${budget})` : ""),
-  );
 
-  const results: Array<[string, boolean]> = [];
-  for (const scenario of scenarios) {
-    try {
-      results.push([scenario.name, await runScenario(scenario)]);
-    } catch (err) {
-      if (err instanceof BudgetReached) {
-        console.error(`\n⛔ ถึงเพดาน --budget ที่ตั้งไว้ (ใช้ไป ${err.used} request) หยุดก่อนโควตาจริงจะหมด`);
-        process.exit(3);
-      }
-      const quota = err instanceof QuotaExhausted ? err : asQuotaError(err);
-      if (quota) {
-        reportQuotaExhausted(quota, results.length, scenarios.length);
-        process.exit(3);
-      }
-      reportAiFailure(err);
-      process.exit(1);
+  console.log(`โมเดลที่ทดสอบ: ${primary}${fallback ? ` (สำรอง: ${fallback})` : " (ไม่มีรุ่นสำรอง)"}`);
+  console.log(
+    `จะรัน ${scenarios.length} scenario · ${perRound} request ต่อรอบ · เว้นจังหวะ ${GAP_MS / 1000} วิ` +
+      (Number.isFinite(budget) ? ` · เพดาน ${budget} request` : ""),
+  );
+  if (durationMs) {
+    const rounds = Math.floor(durationMs / (perRound * GAP_MS));
+    const planned = rounds * perRound;
+    console.log(
+      `โหมดรันยาว ${Math.round(durationMs / 60_000)} นาที · คาดว่าจะได้ประมาณ ${rounds} รอบ ` +
+        `(~${planned} request)`,
+    );
+    if (!Number.isFinite(budget) && planned > 200) {
+      console.log(
+        `⚠️  ยังไม่ได้ตั้ง --budget และแผนนี้จะใช้ ~${planned} request ซึ่งน่าจะเกินโควตาฟรีรายวัน\n` +
+          `   ใส่ --budget=<จำนวน> เพื่อให้สคริปต์กระจายจังหวะเองและหยุดตรงเพดาน`,
+      );
     }
   }
 
-  console.log(`\n${"═".repeat(72)}\nสรุปผล (ใช้ไป ${totalRequests()} Gemini request)`);
-  for (const [name, passed] of results) console.log(`  ${passed ? "✅" : "❌"} ${name}`);
+  const startedAt = Date.now();
+  const deadline = durationMs ? startedAt + durationMs : 0;
+  const tally = new Map<string, Tally>(
+    scenarios.map((s) => [s.name, { runs: 0, passes: 0, rules: new Map<string, number>() }]),
+  );
+  let rounds = 0;
 
-  const failed = results.filter(([, passed]) => !passed).length;
-  console.log(`\n${results.length - failed}/${results.length} scenario ผ่าน`);
-  process.exit(failed === 0 ? 0 : 1);
+  try {
+    do {
+      rounds++;
+      if (durationMs) console.log(`\n${"█".repeat(72)}\nรอบที่ ${rounds}`);
+
+      for (const scenario of scenarios) {
+        if (deadline && Date.now() >= deadline) break;
+        const result = await runScenario(scenario);
+        const t = tally.get(scenario.name)!;
+        t.runs++;
+        if (result.passed) t.passes++;
+        for (const rule of result.rules) t.rules.set(rule, (t.rules.get(rule) ?? 0) + 1);
+      }
+    } while (deadline && Date.now() < deadline && totalRequests() < budget);
+  } catch (err) {
+    if (err instanceof BudgetReached) {
+      console.error(`\n⛔ ถึงเพดาน --budget ที่ตั้งไว้ (ใช้ไป ${err.used} request) หยุดก่อนโควตาจริงจะหมด`);
+      printSummary(tally, startedAt, rounds);
+      process.exit(3);
+    }
+    const quota = err instanceof QuotaExhausted ? err : asQuotaError(err);
+    if (quota) {
+      reportQuotaExhausted(quota, rounds, rounds);
+      printSummary(tally, startedAt, rounds);
+      process.exit(3);
+    }
+    reportAiFailure(err);
+    printSummary(tally, startedAt, rounds);
+    process.exit(1);
+  }
+
+  const totals = printSummary(tally, startedAt, rounds);
+  process.exit(totals.passes === totals.runs ? 0 : 1);
 }
 
 main().catch((err) => {

@@ -112,19 +112,23 @@ function getClient(): GoogleGenerativeAI {
   return client;
 }
 
-export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-export const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash";
+export const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 
-// Which model answers, and which one takes over when the first is out of quota.
+// Words that mean "do not fall back to a second model".
+const NO_FALLBACK = new Set(["", "none", "off", "false", "disabled"]);
+
+// Which model answers, and optionally which one takes over when the first is
+// out of quota. Cross-model failover is off by default: the project runs on one
+// model so that what gets tested is exactly what customers get. Setting
+// GEMINI_FALLBACK_MODEL to another model turns it back on and adds that model's
+// separate daily allowance.
+//
 // An env var that is present but blank (easy to produce from a CI input or a
 // hosting dashboard) counts as unset rather than as an empty model id.
-export function resolveModels(): { primary: string; fallback: string } {
+export function resolveModels(): { primary: string; fallback: string | null } {
   const primary = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
-  const configuredFallback = process.env.GEMINI_FALLBACK_MODEL?.trim();
-  // Keep a usable fallback when the primary has been switched to what would
-  // otherwise be the fallback.
-  const fallback =
-    configuredFallback || (primary === DEFAULT_FALLBACK_MODEL ? DEFAULT_MODEL : DEFAULT_FALLBACK_MODEL);
+  const configured = (process.env.GEMINI_FALLBACK_MODEL ?? "").trim();
+  const fallback = NO_FALLBACK.has(configured.toLowerCase()) || configured === primary ? null : configured;
   return { primary, fallback };
 }
 
@@ -194,7 +198,7 @@ export async function generateChatReply(params: {
     // Free-tier quota is counted per project PER MODEL, so a second model has
     // its own daily allowance. When the main model runs dry, the bot keeps
     // talking on the other one instead of going silent for the rest of the day.
-    if (isQuotaError(err) && fallback && fallback !== primary) {
+    if (isQuotaError(err) && fallback) {
       console.warn(`[gemini] ${primary} out of quota, retrying on ${fallback}`);
       try {
         return await callModel(fallback, contents);
