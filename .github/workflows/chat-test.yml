@@ -4,10 +4,11 @@ name: Chat test
 # scenarios and talks to the real bot prompt, then the transcript and any policy
 # breaks appear in the run log. Needs the GEMINI_API_KEY repository secret.
 on:
-  # 05:00 UTC = 12:00 น. เวลาไทย — soak run ประจำวัน (ลบ block นี้เมื่อไม่ต้องการแล้ว
-  # เพราะรัน 2 ชม./วัน กินโควตา GitHub Actions ~3,600 นาที/เดือน เกินโควตาฟรี)
-  schedule:
-    - cron: "0 5 * * *"
+  # A `schedule:` trigger for 05:00 UTC was tried here and removed: GitHub logged
+  # zero runs with event=schedule over 2h13m past the fire time (confirmed via
+  # the Actions API), likely because top-of-the-hour cron slots see the heaviest
+  # global load and can be dropped rather than merely delayed. Trigger soak runs
+  # by hand (workflow_dispatch) instead.
   workflow_dispatch:
     inputs:
       model:
@@ -55,7 +56,7 @@ jobs:
         # A soak run must outlive the default job timeout.
         timeout-minutes: 360
         run: |
-          npm run test:chat -- "${{ inputs.scenario }}" $SOAK_ARGS \
+          npm run test:chat -- "${{ inputs.scenario }}" \
             ${{ inputs.duration && format('--duration={0}', inputs.duration) || '' }} \
             ${{ inputs.budget && format('--budget={0}', inputs.budget) || '' }} \
             ${{ inputs.gap_ms && format('--gap={0}', inputs.gap_ms) || '' }} \
@@ -64,5 +65,3 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Blank falls through to the code default, so the input can be left empty.
           GEMINI_MODEL: ${{ inputs.model }}
-          # A scheduled run has no inputs, so it carries the soak settings here.
-          SOAK_ARGS: ${{ github.event_name == 'schedule' && '--duration=2h --budget=30' || '' }}
