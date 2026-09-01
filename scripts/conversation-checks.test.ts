@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runAllChecks } from "../src/lib/conversation-checks";
+import {
+  runAllChecks,
+  checkNoFalseEmpathy,
+  checkNoInternalProcessTalk,
+  checkNoInfoGapOnOutOfScope,
+  checkOneQuestionAtATime,
+} from "../src/lib/conversation-checks";
 import { normalizeBubbles, isQuotaError, resolveModels, MAX_BUBBLES, DEFAULT_MODEL } from "../src/lib/gemini";
 import { isPureAcknowledgement, isAcknowledgementOnlyBatch } from "../src/lib/acknowledgement";
 
@@ -205,4 +211,57 @@ test("repeating its own name after the introduction is caught", () => {
     previousReplies: [["สวัสดีค่ะ"]],
   });
   assert.ok(twice.some((v) => v.rule === "self-name" && v.severity === "error"));
+});
+
+test('claiming to "understand" an unhappy customer is caught, using the real replies from the second soak test', () => {
+  assert.deepEqual(
+    checkNoFalseEmpathy(
+      ["Ady เข้าใจเลยค่ะ ต้องขออภัยที่ทำให้คุณลูกค้ารู้สึกไม่สะดวกใจนะคะ"],
+      "negative",
+    ).map((v) => v.rule),
+    ["false-empathy"],
+  );
+  // The same phrase in a neutral turn is normal small talk, not false empathy.
+  assert.deepEqual(
+    checkNoFalseEmpathy(["เข้าใจเลยค่ะว่าเรื่องงบประมาณสำคัญต่อการตัดสินใจมาก"], "neutral"),
+    [],
+  );
+  // A plain apology with no empathy claim must stay clean.
+  assert.deepEqual(checkNoFalseEmpathy(["ขออภัยที่ทำให้คุณลูกค้าต้องรอนานค่ะ"], "negative"), []);
+});
+
+test("explaining the internal work queue to a customer is caught", () => {
+  assert.deepEqual(
+    checkNoInternalProcessTalk([
+      "ต้องขออภัยด้วยนะคะ เนื่องจากคิวงานของทีมงานมีการเปลี่ยนแปลงตลอดเวลาค่ะ",
+    ]).map((v) => v.rule),
+    ["internal-process"],
+  );
+  assert.deepEqual(checkNoInternalProcessTalk(["จะรีบประสานให้ทีมงานติดต่อกลับโดยเร็วที่สุดค่ะ"]), []);
+});
+
+test('"no information" phrasing is only a problem on an out-of-scope technical/legal question', () => {
+  assert.deepEqual(
+    checkNoInfoGapOnOutOfScope(
+      ["ในส่วนของรายละเอียดทางวิศวกรรม Ady ต้องขออภัยที่ยังไม่มีข้อมูลส่วนนี้ค่ะ"],
+      "เทคนิค/กฎหมาย",
+    ).map((v) => v.rule),
+    ["info-gap-phrasing"],
+  );
+  // The same phrasing is fine for a plain business-info gap (e.g. coverage area).
+  assert.deepEqual(
+    checkNoInfoGapOnOutOfScope(["ยังไม่มีข้อมูลส่วนนี้ค่ะ ให้ทีมงานติดต่อกลับนะคะ"], "พื้นที่ให้บริการ"),
+    [],
+  );
+});
+
+test("asking two things at once with \"หรือ\" is flagged as a compound question", () => {
+  assert.deepEqual(
+    checkOneQuestionAtATime([
+      "ไม่ทราบว่าคุณลูกค้าสะดวกให้ติดต่อกลับผ่านช่องทางไหน หรือมีเบอร์โทรศัพท์ที่สะดวกให้ทีมงานติดต่อไหมคะ",
+    ]).map((v) => v.rule),
+    ["compound-question"],
+  );
+  // A single question, even with "หรือ" offering options within it, is fine.
+  assert.deepEqual(checkOneQuestionAtATime(["เป็นบ้านสร้างใหม่หรือต่อเติมของเดิมคะ"]), []);
 });

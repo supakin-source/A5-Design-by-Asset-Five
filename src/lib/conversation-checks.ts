@@ -156,6 +156,10 @@ export interface ConversationContext {
   turnIndex: number;
   /** Bubbles the bot has already sent in this conversation, newest last. */
   previousReplies: string[][];
+  /** The AI's own sentiment classification for this reply, needed by tone-dependent checks. */
+  sentiment?: string;
+  /** The AI's own topic classification for this reply, needed by checks scoped to out-of-scope questions. */
+  topic?: string;
 }
 
 export function checkNotScripted(bubbles: string[], context?: ConversationContext): Violation[] {
@@ -206,6 +210,83 @@ export function checkNotScripted(bubbles: string[], context?: ConversationContex
   return violations;
 }
 
+// Claiming to understand a complaining customer's feelings ("เข้าใจเลยค่ะ") reads
+// as hollow rather than empathetic — it invites "no you don't" — so a direct
+// apology is required instead. Scoped to negative sentiment: the same phrase in
+// a neutral turn ("เข้าใจเลยค่ะว่าเรื่องงบประมาณสำคัญ") is normal small talk.
+const FALSE_EMPATHY = /เข้าใจ|\bi\s+(?:totally\s+|completely\s+)?understand\b/i;
+
+export function checkNoFalseEmpathy(bubbles: string[], sentiment?: string): Violation[] {
+  if (sentiment !== "negative") return [];
+  const text = bubbles.join(" ");
+  if (!FALSE_EMPATHY.test(text)) return [];
+  return [
+    {
+      rule: "false-empathy",
+      severity: "error",
+      detail: 'อ้างว่า "เข้าใจ" ความรู้สึกลูกค้าขณะลูกค้าไม่พอใจ — ควรขอโทษตรงประเด็นแทนการอ้างว่าเข้าใจ',
+    },
+  ];
+}
+
+// A customer waiting for a callback does not need to hear why the wait exists —
+// only that it is happening. Naming the internal cause (a busy queue, a
+// schedule) undercuts the "we're on it" message and invites more questions.
+const INTERNAL_PROCESS =
+  /คิวงาน|ตารางงาน(ของทีม)?|งานยุ่ง|มีความยืดหยุ่นสูง|(?:มี)?การเปลี่ยนแปลงตลอดเวลา/;
+
+export function checkNoInternalProcessTalk(bubbles: string[]): Violation[] {
+  const text = bubbles.join(" ");
+  const match = text.match(INTERNAL_PROCESS);
+  if (!match) return [];
+  return [
+    {
+      rule: "internal-process",
+      severity: "error",
+      detail: `อธิบายกระบวนการทำงานภายในให้ลูกค้าฟัง: "${match[0].trim()}" — บอกแค่ว่าทีมงานจะติดต่อกลับเร็วที่สุดก็พอ`,
+    },
+  ];
+}
+
+// "ไม่มีข้อมูล" is correct for an unanswered business fact (rule 3), but on an
+// engineering/legal question it reads as "our company doesn't know" — the fix
+// is to hand it to a specialist, not to admit a knowledge gap.
+const NO_INFO_PHRASE = /ไม่มีข้อมูล|don'?t have (?:the )?(?:specific )?(?:details|information)/i;
+
+export function checkNoInfoGapOnOutOfScope(bubbles: string[], topic?: string): Violation[] {
+  if (topic !== "เทคนิค/กฎหมาย") return [];
+  const text = bubbles.join(" ");
+  const match = text.match(NO_INFO_PHRASE);
+  if (!match) return [];
+  return [
+    {
+      rule: "info-gap-phrasing",
+      severity: "error",
+      detail: `บอกว่า "${match[0].trim()}" กับคำถามนอกขอบเขตวิศวกรรม/กฎหมาย — ควรบอกว่าต้องให้ผู้เชี่ยวชาญดูแลแทน ไม่ใช่บอกว่าไม่มีข้อมูล`,
+    },
+  ];
+}
+
+// Rough heuristic, not a parser: two question words joined by "หรือ" usually
+// means two separate asks packed into one turn (e.g. "ช่องทางไหน หรือมีเบอร์โทร
+// ไหมคะ" asks both channel and phone number). False positives are possible, so
+// this stays a warning rather than a failing check.
+const QUESTION_WORD = /ไหน|อะไร|ยังไง|เท่าไหร่|กี่|ไหม/g;
+
+export function checkOneQuestionAtATime(bubbles: string[]): Violation[] {
+  const text = bubbles.join(" ");
+  if (!/หรือ/.test(text)) return [];
+  const count = (text.match(QUESTION_WORD) ?? []).length;
+  if (count < 2) return [];
+  return [
+    {
+      rule: "compound-question",
+      severity: "warning",
+      detail: "อาจถามหลายเรื่องพร้อมกันในคำถามเดียว (เชื่อมด้วย 'หรือ') — ควรถามทีละเรื่อง",
+    },
+  ];
+}
+
 export function runAllChecks(
   bubbles: string[],
   customerText: string,
@@ -217,5 +298,9 @@ export function runAllChecks(
     ...checkNoPriceQuote(bubbles, customerText),
     ...checkLanguageMatch(bubbles, customerText),
     ...checkNotScripted(bubbles, context),
+    ...checkNoFalseEmpathy(bubbles, context?.sentiment),
+    ...checkNoInternalProcessTalk(bubbles),
+    ...checkNoInfoGapOnOutOfScope(bubbles, context?.topic),
+    ...checkOneQuestionAtATime(bubbles),
   ];
 }

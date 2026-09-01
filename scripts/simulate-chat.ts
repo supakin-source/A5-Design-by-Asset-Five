@@ -385,6 +385,8 @@ async function runScenario(scenario: Scenario, variantIndex: number): Promise<Sc
     const violations = runAllChecks(ai.replies, customerText, {
       turnIndex: turn,
       previousReplies: state.replies.slice(0, -1).map((r) => r.replies),
+      sentiment: ai.sentiment,
+      topic: ai.topic,
     });
     if (violations.length) {
       console.log(formatViolations(violations));
