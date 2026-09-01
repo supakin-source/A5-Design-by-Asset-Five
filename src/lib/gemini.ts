@@ -28,6 +28,10 @@ export interface StructuredChatReply {
   // False when the message needs no answer at all — a closing remark, or a
   // repeat of an off-topic thread the bot has already redirected once.
   shouldReply?: boolean;
+  // Why the AI call failed, when this is the safe fallback reply. Never shown
+  // to a customer; it exists so tests and logs can tell a spent quota apart
+  // from a wrong model id or a network error.
+  failure?: string;
 }
 
 const responseSchema: ResponseSchema = {
@@ -134,7 +138,13 @@ export function isQuotaError(err: unknown): boolean {
 
 type Contents = Array<{ role: string; parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> }>;
 
+// Every actual call to the API, including a retry on the fallback model. The
+// free-tier allowance is small enough that tests need a truthful count.
+let requestsMade = 0;
+export const geminiRequestsMade = () => requestsMade;
+
 async function callModel(modelId: string, contents: Contents): Promise<StructuredChatReply> {
+  requestsMade++;
   const model = getClient().getGenerativeModel({
     model: modelId,
     systemInstruction: buildSystemPrompt(),
@@ -176,9 +186,11 @@ export async function generateChatReply(params: {
   // Any AI failure (quota exhausted on the free tier, network error, or a reply
   // that doesn't match the schema) falls back to a human handoff, so the
   // customer is never left without an answer — see docs/AI_POLICY.md §3.
+  let lastError: unknown;
   try {
     return await callModel(primary, contents);
   } catch (err) {
+    lastError = err;
     // Free-tier quota is counted per project PER MODEL, so a second model has
     // its own daily allowance. When the main model runs dry, the bot keeps
     // talking on the other one instead of going silent for the rest of the day.
@@ -187,12 +199,14 @@ export async function generateChatReply(params: {
       try {
         return await callModel(fallback, contents);
       } catch (fallbackErr) {
+        lastError = fallbackErr;
         console.error("[gemini] fallback model failed too", fallbackErr);
       }
     } else {
       console.error("[gemini] falling back to human handoff", err);
     }
     return {
+      failure: lastError instanceof Error ? lastError.message : String(lastError),
       replies: [
         "ขออภัยค่ะ ระบบผู้ช่วยอัตโนมัติไม่พร้อมใช้งานชั่วคราว",
         "Ady แจ้งทีมงานให้ติดต่อกลับโดยเร็วที่สุดแล้วนะคะ 🙏",

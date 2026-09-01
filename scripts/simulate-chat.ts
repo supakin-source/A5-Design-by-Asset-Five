@@ -8,6 +8,7 @@
  *   GEMINI_API_KEY=... npm run test:chat                  # every scenario
  *   GEMINI_API_KEY=... npm run test:chat -- ราคา          # scenarios matching a name
  *   GEMINI_API_KEY=... npm run test:chat -- --ai-customer # let an AI improvise the customer
+ *   GEMINI_API_KEY=... npm run test:chat -- --budget=6     # stop after 6 requests
  *
  * Quota matters: the bot side of every turn spends one Gemini request from the
  * same daily allowance production uses. Scripted turns are the default so a full
@@ -15,10 +16,18 @@
  * less predictable, more realistic customers.
  *
  * LINE is not involved — this exercises the conversation, not the webhook.
- * Exit codes: 0 pass, 1 policy failures, 2 bad usage, 3 quota exhausted.
+ * Exit codes: 0 pass, 1 policy failures or an AI error, 2 bad usage,
+ * 3 quota exhausted or the --budget ceiling reached.
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { generateChatReply, resolveModels, type ChatTurn, type StructuredChatReply } from "../src/lib/gemini";
+import {
+  generateChatReply,
+  resolveModels,
+  isQuotaError,
+  geminiRequestsMade,
+  type ChatTurn,
+  type StructuredChatReply,
+} from "../src/lib/gemini";
 import { runAllChecks, type Violation } from "../src/lib/conversation-checks";
 
 interface Scenario {
@@ -109,7 +118,14 @@ const args = process.argv.slice(2);
 const useAiCustomer = args.includes("--ai-customer");
 const filter = args.find((arg) => !arg.startsWith("-") && arg.trim().length > 0);
 
-let apiCalls = 0;
+// Customer-simulator calls happen here; bot-side calls (including fallback
+// retries) are counted inside the library.
+let simulatorCalls = 0;
+const totalRequests = () => simulatorCalls + geminiRequestsMade();
+
+// Optional ceiling so a run cannot eat the live bot's daily allowance.
+const budgetArg = args.find((a) => a.startsWith("--budget="));
+const budget = budgetArg ? Number(budgetArg.split("=")[1]) : Infinity;
 
 function requireApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
@@ -122,6 +138,12 @@ function requireApiKey(): string {
 
 const client = new GoogleGenerativeAI(requireApiKey());
 
+class BudgetReached extends Error {
+  constructor(readonly used: number) {
+    super("request budget reached");
+  }
+}
+
 class QuotaExhausted extends Error {
   constructor(readonly retryAfter?: string) {
     super("gemini quota exhausted");
@@ -130,7 +152,7 @@ class QuotaExhausted extends Error {
 
 function asQuotaError(err: unknown): QuotaExhausted | null {
   const message = err instanceof Error ? err.message : String(err);
-  if (!message.includes("429") && !message.toLowerCase().includes("quota")) return null;
+  if (!isQuotaError(message)) return null;
   const retry = message.match(/retry in ([\d.]+s)/i)?.[1] ?? message.match(/"retryDelay":\s*"([^"]+)"/)?.[1];
   return new QuotaExhausted(retry);
 }
@@ -146,7 +168,7 @@ async function customerSays(scenario: Scenario, transcript: string[]): Promise<s
     generationConfig: { temperature: 0.9, maxOutputTokens: 200 },
   });
 
-  apiCalls++;
+  simulatorCalls++;
   const result = await model.generateContent(
     `บทสนทนาจนถึงตอนนี้:\n${transcript.join("\n")}\n\nลูกค้าจะพิมพ์อะไรต่อ`,
   );
@@ -179,13 +201,18 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
     transcript.push(`ลูกค้า: ${customerText}`);
     state.customerMessages.push(customerText);
 
-    apiCalls++;
+    if (totalRequests() >= budget) {
+      throw new BudgetReached(totalRequests());
+    }
     const ai = await generateChatReply({ history, userMessage: customerText });
     if (ai.escalationReason === "ai_unavailable") {
       // generateChatReply swallows API errors by design (production must never
       // leave a customer unanswered), but in a test that silence would look
-      // like a passing run, so surface it here.
-      throw new QuotaExhausted();
+      // like a passing run. Re-raise it, keeping the real reason so a spent
+      // quota is not confused with a wrong model id.
+      const reason = ai.failure ?? "ไม่ทราบสาเหตุ";
+      if (isQuotaError(reason)) throw asQuotaError(reason) ?? new QuotaExhausted();
+      throw new Error(`เรียก AI ไม่สำเร็จ: ${reason}`);
     }
     state.replies.push(ai);
 
@@ -217,10 +244,26 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
   return errors === 0;
 }
 
+// Anything that is not a spent quota: usually a model id this key cannot use.
+function reportAiFailure(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  const { primary, fallback } = resolveModels();
+  console.error(`\n${"═".repeat(72)}`);
+  console.error("⛔ เรียก AI ไม่สำเร็จ (ไม่ใช่เรื่องโควตา)");
+  console.error(`   โมเดลที่ใช้: ${primary} · สำรอง: ${fallback}`);
+  console.error(`   ${message}`);
+  if (/404|not found|unsupported|permission/i.test(message)) {
+    console.error("");
+    console.error("   น่าจะเป็นเพราะชื่อรุ่นไม่ถูกต้อง หรือ key นี้ยังไม่มีสิทธิ์ใช้รุ่นนี้");
+    console.error("   ดูรายชื่อรุ่นที่ key ใช้ได้จริง:");
+    console.error("   https://generativelanguage.googleapis.com/v1beta/models?key=<GEMINI_API_KEY>");
+  }
+}
+
 function reportQuotaExhausted(quota: QuotaExhausted, done: number, total: number) {
   console.error(`\n${"═".repeat(72)}`);
   console.error("⛔ โควตา Gemini หมด — หยุดการทดสอบ");
-  console.error(`   รันไปแล้ว ${done}/${total} scenario · ใช้ไป ${apiCalls} request`);
+  console.error(`   รันไปแล้ว ${done}/${total} scenario · ใช้ไป ${totalRequests()} request`);
   if (quota.retryAfter) console.error(`   ลองใหม่ได้ในอีก ${quota.retryAfter}`);
   console.error("");
   console.error("   ทางเลือก:");
@@ -245,21 +288,31 @@ async function main() {
   const estimate = useAiCustomer ? turnCount * 2 - scenarios.length : turnCount;
   const { primary, fallback } = resolveModels();
   console.log(`โมเดลที่ทดสอบ: ${primary} (สำรอง: ${fallback})`);
-  console.log(`จะรัน ${scenarios.length} scenario · ใช้ประมาณ ${estimate} Gemini request`);
+  console.log(
+    `จะรัน ${scenarios.length} scenario · ใช้ประมาณ ${estimate} Gemini request` +
+      (Number.isFinite(budget) ? ` (เพดาน ${budget})` : ""),
+  );
 
   const results: Array<[string, boolean]> = [];
   for (const scenario of scenarios) {
     try {
       results.push([scenario.name, await runScenario(scenario)]);
     } catch (err) {
+      if (err instanceof BudgetReached) {
+        console.error(`\n⛔ ถึงเพดาน --budget ที่ตั้งไว้ (ใช้ไป ${err.used} request) หยุดก่อนโควตาจริงจะหมด`);
+        process.exit(3);
+      }
       const quota = err instanceof QuotaExhausted ? err : asQuotaError(err);
-      if (!quota) throw err;
-      reportQuotaExhausted(quota, results.length, scenarios.length);
-      process.exit(3);
+      if (quota) {
+        reportQuotaExhausted(quota, results.length, scenarios.length);
+        process.exit(3);
+      }
+      reportAiFailure(err);
+      process.exit(1);
     }
   }
 
-  console.log(`\n${"═".repeat(72)}\nสรุปผล (ใช้ไป ${apiCalls} Gemini request)`);
+  console.log(`\n${"═".repeat(72)}\nสรุปผล (ใช้ไป ${totalRequests()} Gemini request)`);
   for (const [name, passed] of results) console.log(`  ${passed ? "✅" : "❌"} ${name}`);
 
   const failed = results.filter(([, passed]) => !passed).length;

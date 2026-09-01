@@ -183,8 +183,10 @@ production) แล้วตรวจกฎอัตโนมัติทุก�
 **หรือรันในเครื่อง**
 
 ```bash
-GEMINI_API_KEY=xxx npm run test:chat          # รันทุก scenario
-GEMINI_API_KEY=xxx npm run test:chat -- ราคา  # เฉพาะ scenario ที่ชื่อมีคำว่า "ราคา"
+GEMINI_API_KEY=xxx npm run test:chat                  # รันทุก scenario
+GEMINI_API_KEY=xxx npm run test:chat -- ราคา          # เฉพาะ scenario ที่ชื่อมีคำว่า "ราคา"
+GEMINI_API_KEY=xxx npm run test:chat -- --budget=6    # หยุดเองเมื่อใช้ครบ 6 request
+GEMINI_MODEL=gemini-3.1-flash-lite npm run test:chat  # ทดสอบรุ่นอื่น
 ```
 
 **Scenario ที่มีให้** (แก้/เพิ่มได้ที่ [`scripts/simulate-chat.ts`](scripts/simulate-chat.ts))
