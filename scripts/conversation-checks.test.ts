@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAllChecks } from "../src/lib/conversation-checks";
-import { normalizeBubbles, MAX_BUBBLES } from "../src/lib/gemini";
+import { normalizeBubbles, isQuotaError, MAX_BUBBLES } from "../src/lib/gemini";
 
 const rulesFor = (bubbles: string[], customerText: string) =>
   [...new Set(runAllChecks(bubbles, customerText).map((v) => v.rule))].sort();
@@ -63,4 +63,16 @@ test("normalizeBubbles drops empties, caps the count, and splits long text at wh
     long.every((bubble) => !bubble.startsWith(" ") && !bubble.endsWith(" ")),
     "ฟองที่หั่นแล้วต้องไม่มีช่องว่างหัวท้าย",
   );
+});
+
+test("quota rejections are told apart from other failures", () => {
+  const quotaMessage =
+    "[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/" +
+    "v1beta/models/gemini-3.5-flash:generateContent: [429 Too Many Requests] You exceeded your " +
+    "current quota";
+  assert.ok(isQuotaError(new Error(quotaMessage)), "429 ต้องถูกจับว่าเป็นโควตาหมด");
+  assert.ok(isQuotaError(new Error("Quota exceeded for metric: generate_content_free_tier_requests")));
+  assert.ok(!isQuotaError(new Error("[404 Not Found] models/gemini-9 is not found")));
+  assert.ok(!isQuotaError(new Error("model returned no reply text")));
+  assert.ok(!isQuotaError(new Error("fetch failed")));
 });

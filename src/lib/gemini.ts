@@ -101,6 +101,33 @@ function getClient(): GoogleGenerativeAI {
   return client;
 }
 
+// A daily-quota rejection, as opposed to a bad request or a network blip. The
+// SDK surfaces these as a message string, so match on both the status and the
+// quota wording rather than a typed field.
+export function isQuotaError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b429\b/.test(message) || /quota|rate limit|too many requests/i.test(message);
+}
+
+type Contents = Array<{ role: string; parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> }>;
+
+async function callModel(modelId: string, contents: Contents): Promise<StructuredChatReply> {
+  const model = getClient().getGenerativeModel({
+    model: modelId,
+    systemInstruction: buildSystemPrompt(),
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema,
+      temperature: 0.3,
+    },
+  });
+  const result = await model.generateContent({ contents });
+  const parsed = JSON.parse(result.response.text()) as StructuredChatReply;
+  const replies = normalizeBubbles(parsed.replies);
+  if (replies.length === 0) throw new Error("model returned no reply text");
+  return { ...parsed, replies };
+}
+
 export async function generateChatReply(params: {
   history: ChatTurn[];
   userMessage: string;
@@ -117,29 +144,28 @@ export async function generateChatReply(params: {
     { role: "user" as const, parts: userParts },
   ];
 
+  const primary = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+  const fallback = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3.5-flash";
+
   // Any AI failure (quota exhausted on the free tier, network error, or a reply
   // that doesn't match the schema) falls back to a human handoff, so the
   // customer is never left without an answer — see docs/AI_POLICY.md §3.
   try {
-    const model = getClient().getGenerativeModel({
-      // Google retires model IDs on a schedule (gemini-2.0-flash was shut down
-      // 2026-06-01), so check the current model list when calls start failing
-      // with 404 and override GEMINI_MODEL rather than editing this default.
-      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
-      systemInstruction: buildSystemPrompt(),
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.3,
-      },
-    });
-    const result = await model.generateContent({ contents });
-    const parsed = JSON.parse(result.response.text()) as StructuredChatReply;
-    const replies = normalizeBubbles(parsed.replies);
-    if (replies.length === 0) throw new Error("model returned no reply text");
-    return { ...parsed, replies };
+    return await callModel(primary, contents);
   } catch (err) {
-    console.error("[gemini] falling back to human handoff", err);
+    // Free-tier quota is counted per project PER MODEL, so a second model has
+    // its own daily allowance. When the main model runs dry, the bot keeps
+    // talking on the other one instead of going silent for the rest of the day.
+    if (isQuotaError(err) && fallback && fallback !== primary) {
+      console.warn(`[gemini] ${primary} out of quota, retrying on ${fallback}`);
+      try {
+        return await callModel(fallback, contents);
+      } catch (fallbackErr) {
+        console.error("[gemini] fallback model failed too", fallbackErr);
+      }
+    } else {
+      console.error("[gemini] falling back to human handoff", err);
+    }
     return {
       replies: [
         "ขออภัยค่ะ ระบบผู้ช่วยอัตโนมัติไม่พร้อมใช้งานชั่วคราว",
