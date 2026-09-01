@@ -14,6 +14,11 @@ on:
         description: "รันเฉพาะ scenario ที่ชื่อมีคำนี้ (เว้นว่าง = รันทั้งหมด ~15 request)"
         required: false
         type: string
+      gap_ms:
+        description: "เว้นจังหวะระหว่าง request (มิลลิวินาที) กัน rate limit ต่อนาที — ค่าเริ่มต้น 5000"
+        required: false
+        default: "5000"
+        type: string
       ai_customer:
         description: "ให้ AI ด้นบทลูกค้าเอง (สมจริงกว่า แต่ใช้โควตาเกือบสองเท่า)"
         required: false
@@ -36,7 +41,7 @@ jobs:
         run: npm ci
 
       - name: Talk to the bot
-        run: npm run test:chat -- "${{ inputs.scenario }}" ${{ inputs.ai_customer && '--ai-customer' || '' }}
+        run: npm run test:chat -- "${{ inputs.scenario }}" "--gap=${{ inputs.gap_ms }}" ${{ inputs.ai_customer && '--ai-customer' || '' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Blank falls through to the code default, so the input can be left empty.

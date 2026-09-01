@@ -9,6 +9,7 @@
  *   GEMINI_API_KEY=... npm run test:chat -- ราคา          # scenarios matching a name
  *   GEMINI_API_KEY=... npm run test:chat -- --ai-customer # let an AI improvise the customer
  *   GEMINI_API_KEY=... npm run test:chat -- --budget=6     # stop after 6 requests
+ *   GEMINI_API_KEY=... npm run test:chat -- --gap=8000     # seconds between requests
  *
  * Quota matters: the bot side of every turn spends one Gemini request from the
  * same daily allowance production uses. Scripted turns are the default so a full
@@ -127,6 +128,27 @@ const totalRequests = () => simulatorCalls + geminiRequestsMade();
 const budgetArg = args.find((a) => a.startsWith("--budget="));
 const budget = budgetArg ? Number(budgetArg.split("=")[1]) : Infinity;
 
+// Free tiers cap requests per minute as well as per day, and a scripted run
+// fires far faster than a real conversation would. Pacing keeps a run from
+// tripping the per-minute limit while its daily allowance is still intact.
+const gapArg = args.find((a) => a.startsWith("--gap="));
+const GAP_MS = gapArg ? Number(gapArg.split("=")[1]) : 5000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+let lastRequestAt = 0;
+
+async function pace() {
+  const waitFor = lastRequestAt + GAP_MS - Date.now();
+  if (waitFor > 0) await sleep(waitFor);
+  lastRequestAt = Date.now();
+}
+
+function retryDelayMs(retryAfter?: string): number {
+  const seconds = retryAfter ? Number.parseFloat(retryAfter) : NaN;
+  // A per-minute limit clears within the minute; cap the wait so a genuinely
+  // spent daily quota does not stall the run.
+  return Number.isFinite(seconds) ? Math.min(Math.max(seconds, 1) * 1000 + 1000, 70_000) : 30_000;
+}
+
 function requireApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
@@ -168,6 +190,7 @@ async function customerSays(scenario: Scenario, transcript: string[]): Promise<s
     generationConfig: { temperature: 0.9, maxOutputTokens: 200 },
   });
 
+  await pace();
   simulatorCalls++;
   const result = await model.generateContent(
     `บทสนทนาจนถึงตอนนี้:\n${transcript.join("\n")}\n\nลูกค้าจะพิมพ์อะไรต่อ`,
@@ -204,15 +227,31 @@ async function runScenario(scenario: Scenario): Promise<boolean> {
     if (totalRequests() >= budget) {
       throw new BudgetReached(totalRequests());
     }
-    const ai = await generateChatReply({ history, userMessage: customerText });
+
+    await pace();
+    let ai = await generateChatReply({ history, userMessage: customerText });
+
+    // generateChatReply swallows API errors by design (production must never
+    // leave a customer unanswered), but in a test that silence would look like
+    // a passing run. Re-raise it, keeping the real reason so a spent quota is
+    // not confused with a wrong model id.
     if (ai.escalationReason === "ai_unavailable") {
-      // generateChatReply swallows API errors by design (production must never
-      // leave a customer unanswered), but in a test that silence would look
-      // like a passing run. Re-raise it, keeping the real reason so a spent
-      // quota is not confused with a wrong model id.
       const reason = ai.failure ?? "ไม่ทราบสาเหตุ";
-      if (isQuotaError(reason)) throw asQuotaError(reason) ?? new QuotaExhausted();
-      throw new Error(`เรียก AI ไม่สำเร็จ: ${reason}`);
+      if (!isQuotaError(reason)) throw new Error(`เรียก AI ไม่สำเร็จ: ${reason}`);
+
+      // A per-minute limit clears on its own, so wait it out once before
+      // concluding the daily allowance is gone.
+      const quota = asQuotaError(reason) ?? new QuotaExhausted();
+      const waitMs = retryDelayMs(quota.retryAfter);
+      console.log(`      ⏳ โดนจำกัดอัตราการเรียก รอ ${Math.round(waitMs / 1000)} วินาทีแล้วลองใหม่`);
+      await sleep(waitMs);
+      lastRequestAt = Date.now();
+      ai = await generateChatReply({ history, userMessage: customerText });
+      if (ai.escalationReason === "ai_unavailable") {
+        const retryReason = ai.failure ?? "ไม่ทราบสาเหตุ";
+        if (!isQuotaError(retryReason)) throw new Error(`เรียก AI ไม่สำเร็จ: ${retryReason}`);
+        throw asQuotaError(retryReason) ?? new QuotaExhausted();
+      }
     }
     state.replies.push(ai);
 
@@ -265,6 +304,8 @@ function reportQuotaExhausted(quota: QuotaExhausted, done: number, total: number
   console.error("⛔ โควตา Gemini หมด — หยุดการทดสอบ");
   console.error(`   รันไปแล้ว ${done}/${total} scenario · ใช้ไป ${totalRequests()} request`);
   if (quota.retryAfter) console.error(`   ลองใหม่ได้ในอีก ${quota.retryAfter}`);
+  console.error("");
+  console.error("   (ลองใหม่หลังรอแล้วหนึ่งครั้ง ยังไม่ผ่าน จึงน่าจะเป็นโควตารายวันจริง)");
   console.error("");
   console.error("   ทางเลือก:");
   console.error("   1. รันทีละ scenario:  npm run test:chat -- <ชื่อบางส่วน>");
