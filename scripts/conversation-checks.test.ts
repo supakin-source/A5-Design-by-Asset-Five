@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAllChecks } from "../src/lib/conversation-checks";
 import { normalizeBubbles, isQuotaError, MAX_BUBBLES } from "../src/lib/gemini";
+import { isPureAcknowledgement, isAcknowledgementOnlyBatch } from "../src/lib/acknowledgement";
 
 const rulesFor = (bubbles: string[], customerText: string) =>
   [...new Set(runAllChecks(bubbles, customerText).map((v) => v.rule))].sort();
@@ -75,4 +76,44 @@ test("quota rejections are told apart from other failures", () => {
   assert.ok(!isQuotaError(new Error("[404 Not Found] models/gemini-9 is not found")));
   assert.ok(!isQuotaError(new Error("model returned no reply text")));
   assert.ok(!isQuotaError(new Error("fetch failed")));
+});
+
+test("closing remarks are recognised so the bot can stay silent", () => {
+  for (const text of [
+    "ขอบคุณครับ",
+    "ขอบคุณค่ะ 🙏",
+    "ขอบคุณมากนะคะ",
+    "โอเคครับ",
+    "ok",
+    "Thanks!",
+    "จ้า",
+    "ครับผม",
+    "รับทราบครับ",
+    "เข้าใจแล้วค่ะ",
+    "👍",
+    "noted, thank you",
+    "bye",
+  ]) {
+    assert.ok(isPureAcknowledgement(text), `ควรถือเป็นคำปิดบทสนทนา: "${text}"`);
+  }
+});
+
+test("a closing word attached to a real request still gets an answer", () => {
+  for (const text of [
+    "ขอบคุณครับ แล้วราคาล่ะ",
+    "ok แต่ขอถามอีกอย่าง",
+    "ครับ ผมสนใจต่อเติมครัว",
+    "โอเคไหมถ้าจะนัดดูหน้างาน",
+    "thanks, can you call me tomorrow?",
+    "เบอร์ผม 081-234-5678",
+    "สวัสดีครับ",
+  ]) {
+    assert.ok(!isPureAcknowledgement(text), `ต้องไม่เงียบ: "${text}"`);
+  }
+});
+
+test("a burst counts as closing only when every fragment is", () => {
+  assert.ok(isAcknowledgementOnlyBatch(["ขอบคุณครับ", "👍"]));
+  assert.ok(!isAcknowledgementOnlyBatch(["ขอบคุณครับ", "อ้อ แล้วต่อเติมครัวราคาเท่าไหร่"]));
+  assert.ok(!isAcknowledgementOnlyBatch([]));
 });

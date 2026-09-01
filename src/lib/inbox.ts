@@ -9,6 +9,7 @@ import {
   markHandedOff,
 } from "./lead";
 import { notifyStaff } from "./notify";
+import { isAcknowledgementOnlyBatch } from "./acknowledgement";
 
 const HISTORY_LIMIT = 12;
 
@@ -78,14 +79,48 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
   const profile = await getLineProfile(lineUserId);
   const { lead, conversation } = await getOrCreateLeadAndConversation(lineUserId, profile?.displayName);
 
+  // "ขอบคุณครับ", "โอเค", a lone 👍 — nothing to answer, and answering would
+  // spend a Gemini request from a small daily quota. Recorded, not replied to.
+  const hasImage = batch.some((m) => m.kind === "image");
+  if (!hasImage && isAcknowledgementOnlyBatch(batch.map((m) => m.text))) {
+    console.log("[inbox] acknowledgement only, staying silent", { fragments: batch.length });
+    for (const message of batch) {
+      if (!message.text.trim()) continue;
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: MessageRole.USER,
+          content: message.text,
+          topic: "รับทราบ/ปิดบทสนทนา",
+          createdAt: message.createdAt,
+        },
+      });
+    }
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastActive: new Date() },
+    });
+    return;
+  }
+
   const recent = await prisma.message.findMany({
     where: { conversationId: conversation.id, role: { in: [MessageRole.USER, MessageRole.BOT] } },
     orderBy: { createdAt: "desc" },
     take: HISTORY_LIMIT,
   });
-  const history: ChatTurn[] = recent
-    .reverse()
-    .map((m) => ({ role: m.role === MessageRole.USER ? "user" : "model", text: m.content }));
+  // Each bot bubble is its own row, so consecutive rows from the same side are
+  // folded back into one turn: fewer, cleaner turns for the same context, and
+  // fewer tokens per request.
+  const history = recent.reverse().reduce<ChatTurn[]>((turns, message) => {
+    const role = message.role === MessageRole.USER ? "user" : "model";
+    const previous = turns[turns.length - 1];
+    if (previous?.role === role) {
+      previous.text += `\n${message.content}`;
+    } else {
+      turns.push({ role, text: message.content });
+    }
+    return turns;
+  }, []);
 
   const imageMessages = batch.filter((m) => m.kind === "image").slice(0, MAX_IMAGES_PER_BATCH);
   const images = (
@@ -158,13 +193,18 @@ async function answerBatch(lineUserId: string, batch: PendingMessage[]): Promise
   // matters more than the chat message landing.
   // All bubbles go out in a single reply call: they arrive as separate messages
   // in the chat, and a reply is free where a push message would be metered.
-  try {
-    await replyMessage(
-      batch[batch.length - 1].replyToken,
-      ai.replies.map((text) => ({ type: "text" as const, text })),
-    );
-  } catch (err) {
-    console.error("[inbox] reply failed", err);
+  // The model can also decide this message needed no answer at all.
+  if (ai.shouldReply === false || ai.replies.length === 0) {
+    console.log("[inbox] model chose not to reply");
+  } else {
+    try {
+      await replyMessage(
+        batch[batch.length - 1].replyToken,
+        ai.replies.map((text) => ({ type: "text" as const, text })),
+      );
+    } catch (err) {
+      console.error("[inbox] reply failed", err);
+    }
   }
 
   const shouldHandoff = ai.needsHuman || hasEnoughInfoForHandoff(updatedLead);

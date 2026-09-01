@@ -25,6 +25,9 @@ export interface StructuredChatReply {
   escalationReason?: string;
   // Text summary of a photo the customer sent; stored in place of the image itself.
   imageDescription?: string;
+  // False when the message needs no answer at all — a closing remark, or a
+  // repeat of an off-topic thread the bot has already redirected once.
+  shouldReply?: boolean;
 }
 
 const responseSchema: ResponseSchema = {
@@ -57,6 +60,10 @@ const responseSchema: ResponseSchema = {
     needsHuman: { type: SchemaType.BOOLEAN },
     escalationReason: { type: SchemaType.STRING, nullable: true },
     imageDescription: { type: SchemaType.STRING, nullable: true },
+    shouldReply: {
+      type: SchemaType.BOOLEAN,
+      description: "false = ไม่ต้องตอบข้อความนี้ (เช่น คำขอบคุณ/ปิดบทสนทนา)",
+    },
   },
   required: ["replies", "extractedFields", "needsHuman"],
 };
@@ -124,7 +131,11 @@ async function callModel(modelId: string, contents: Contents): Promise<Structure
   const result = await model.generateContent({ contents });
   const parsed = JSON.parse(result.response.text()) as StructuredChatReply;
   const replies = normalizeBubbles(parsed.replies);
-  if (replies.length === 0) throw new Error("model returned no reply text");
+  // Staying silent is a valid outcome, but only when the model asked for it:
+  // an empty reply with shouldReply left on is a broken response, not silence.
+  if (replies.length === 0 && parsed.shouldReply !== false) {
+    throw new Error("model returned no reply text");
+  }
   return { ...parsed, replies };
 }
 
