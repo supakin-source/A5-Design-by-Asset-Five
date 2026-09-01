@@ -145,3 +145,21 @@ model StaffNotification {
 
   @@index([projectId])
 }
+
+// Who did what, to which record, and when — for the dashboard's manual
+// edit/delete/merge actions (src/app/api/dashboard/**). No relation to
+// Project: the target may already be deleted or merged away by the time
+// anyone looks at the log, so targetId is a loose reference rather than a
+// foreign key.
+model AuditLog {
+  id         String   @id @default(cuid())
+  username   String
+  action     String // "update" | "delete" | "merge"
+  targetType String // "Project"
+  targetId   String
+  detail     String // human-readable summary of what changed
+  createdAt  DateTime @default(now())
+
+  @@index([targetId])
+  @@index([createdAt])
+}

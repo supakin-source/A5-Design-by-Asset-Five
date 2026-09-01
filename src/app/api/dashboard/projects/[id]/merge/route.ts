@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, isValidSessionToken, getSessionUsername } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.adminPassword !== expected) {
     return NextResponse.json({ error: "รหัสผ่านสำหรับแก้ไขข้อมูลไม่ถูกต้อง" }, { status: 401 });
   }
+  const username = await getSessionUsername(token);
+  if (!username) return NextResponse.json({ error: "ไม่พบตัวตนผู้ใช้ในเซสชัน กรุณาเข้าสู่ระบบใหม่" }, { status: 401 });
 
   const duplicateId = body.duplicateProjectId;
   if (!duplicateId) return NextResponse.json({ error: "ไม่ได้ระบุงานที่จะ merge" }, { status: 400 });
@@ -59,6 +62,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     prisma.staffNotification.updateMany({ where: { projectId: duplicateId }, data: { projectId: primaryId } }),
     prisma.project.delete({ where: { id: duplicateId } }),
   ]);
+
+  await logAudit({
+    username,
+    action: "merge",
+    targetType: "Project",
+    targetId: primaryId,
+    detail: `merge งาน ${duplicateId} (ประเภทงาน: ${duplicate.projectType ?? "ไม่ระบุ"}) เข้ากับงานนี้${
+      Object.keys(fill).length > 0 ? ` — เติมค่า: ${Object.entries(fill).map(([k, v]) => `${k}="${v}"`).join(", ")}` : ""
+    }`,
+  });
 
   return NextResponse.json({ ok: true });
 }

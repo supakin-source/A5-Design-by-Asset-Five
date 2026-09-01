@@ -42,19 +42,30 @@ export async function createSessionToken(username: string): Promise<string> {
   return `${payload}.${await sign(payload, getSecret())}`;
 }
 
-export async function isValidSessionToken(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
+async function decodeVerifiedPayload(token: string | undefined): Promise<{ u?: string; exp?: number } | null> {
+  if (!token) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
+  if (!payload || !signature) return null;
 
   const expected = await sign(payload, getSecret());
-  if (!constantTimeEqual(signature, expected)) return false;
+  if (!constantTimeEqual(signature, expected)) return null;
 
   try {
     const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    const { exp } = JSON.parse(json) as { exp?: number };
-    return typeof exp === "number" && exp > Date.now();
+    const parsed = JSON.parse(json) as { u?: string; exp?: number };
+    return typeof parsed.exp === "number" && parsed.exp > Date.now() ? parsed : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function isValidSessionToken(token: string | undefined): Promise<boolean> {
+  return (await decodeVerifiedPayload(token)) !== null;
+}
+
+// Who is behind a valid session — used to attribute audit-log entries for
+// dashboard edits/deletes/merges to the account that made them.
+export async function getSessionUsername(token: string | undefined): Promise<string | null> {
+  const payload = await decodeVerifiedPayload(token);
+  return payload?.u ?? null;
 }

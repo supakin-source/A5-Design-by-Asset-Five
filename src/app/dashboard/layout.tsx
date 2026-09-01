@@ -8,6 +8,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link href="/dashboard">ภาพรวม</Link>
           <Link href="/dashboard/leads">รายชื่อลูกค้า</Link>
           <Link href="/dashboard/analytics">Market data</Link>
+          <Link href="/dashboard/audit-log">ประวัติการแก้ไข</Link>
         </nav>
         <form action="/api/auth/logout" method="post">
           <button className="link-button" type="submit">

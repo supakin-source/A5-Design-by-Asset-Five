@@ -15,11 +15,10 @@ interface EditableProject {
   location: string;
   timeline: string;
   contactNote: string;
-  notes: string;
   status: ProjectStatus;
 }
 
-const FIELD_LABELS: Array<[keyof EditableProject, string]> = [
+const FIELD_LABELS: Array<[keyof Omit<EditableProject, "id" | "status">, string]> = [
   ["displayName", "ชื่อลูกค้า"],
   ["phone", "เบอร์ติดต่อ"],
   ["projectType", "ประเภทงาน"],
@@ -28,20 +27,20 @@ const FIELD_LABELS: Array<[keyof EditableProject, string]> = [
   ["location", "พื้นที่/ทำเล"],
   ["timeline", "กรอบเวลา"],
   ["contactNote", "ช่วงเวลาที่สะดวกติดต่อ"],
-  ["notes", "โน้ตภายใน (ทีมงาน)"],
 ];
 
 export function EditProject({ project }: { project: EditableProject }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(project);
-  const [adminPassword, setAdminPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
+    const adminPassword = window.prompt("กรอกรหัสผ่านยืนยันการบันทึกข้อมูล:");
+    if (adminPassword === null) return; // cancelled
     if (!adminPassword) {
-      setError("ต้องกรอกรหัสผ่านยืนยันการแก้ไขก่อน");
+      setError("ต้องกรอกรหัสผ่านยืนยันก่อน");
       return;
     }
     setBusy(true);
@@ -55,7 +54,6 @@ export function EditProject({ project }: { project: EditableProject }) {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "แก้ไขไม่สำเร็จ");
       setOpen(false);
-      setAdminPassword("");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -65,11 +63,12 @@ export function EditProject({ project }: { project: EditableProject }) {
   }
 
   async function remove() {
+    const adminPassword = window.prompt(
+      'พิมพ์รหัสผ่านยืนยันเพื่อ "ลบงานนี้ถาวร" — บทสนทนาและการแจ้งเตือนทั้งหมดจะถูกลบไปด้วย กู้คืนไม่ได้:',
+    );
+    if (adminPassword === null) return; // cancelled
     if (!adminPassword) {
-      setError("ต้องกรอกรหัสผ่านยืนยันการลบก่อน");
-      return;
-    }
-    if (!window.confirm("ยืนยันลบข้อมูลงานนี้ทั้งหมด (บทสนทนา, การแจ้งเตือนทีมงาน) ถาวร ไม่สามารถกู้คืนได้?")) {
+      setError("ต้องกรอกรหัสผ่านยืนยันก่อน");
       return;
     }
     setBusy(true);
@@ -100,7 +99,7 @@ export function EditProject({ project }: { project: EditableProject }) {
   return (
     <div className="card" style={{ marginTop: 12 }}>
       <h2>แก้ไขข้อมูล</h2>
-      <p className="sub">ต้องกรอกรหัสผ่านยืนยัน (ตั้งค่าไว้ที่ DASHBOARD_ADMIN_PASSWORD) ก่อนบันทึกหรือลบ</p>
+      <p className="sub">กด "บันทึก" หรือ "ลบงานนี้ถาวร" จะมีป็อปอัพให้กรอกรหัสผ่านยืนยันก่อนดำเนินการ</p>
       <div className="table-wrap">
         <table>
           <tbody>
@@ -129,18 +128,6 @@ export function EditProject({ project }: { project: EditableProject }) {
                     </option>
                   ))}
                 </select>
-              </td>
-            </tr>
-            <tr>
-              <th>รหัสผ่านยืนยัน</th>
-              <td>
-                <input
-                  type="password"
-                  style={{ width: "100%" }}
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="DASHBOARD_ADMIN_PASSWORD"
-                />
               </td>
             </tr>
           </tbody>

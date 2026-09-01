@@ -82,7 +82,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                 location: project.location ?? "",
                 timeline: project.timeline ?? "",
                 contactNote: project.contactNote ?? "",
-                notes: project.notes ?? "",
                 status: project.status,
               }}
             />
