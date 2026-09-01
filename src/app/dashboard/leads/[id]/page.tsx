@@ -27,6 +27,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     ["ชื่อ", lead.displayName ?? "—"],
     ["เบอร์ติดต่อ", lead.phone ?? "—"],
     ["ประเภทงาน", lead.projectType ?? "—"],
+    ["รายละเอียดงาน", lead.projectDetail ?? "—"],
     ["งบประมาณ", lead.budgetRange ?? "—"],
     ["พื้นที่/ทำเล", lead.location ?? "—"],
     ["กรอบเวลา", lead.timeline ?? "—"],

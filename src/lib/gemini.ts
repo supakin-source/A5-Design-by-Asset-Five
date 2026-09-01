@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType, type ResponseSchema } from "@google/generative-ai";
-import { buildSystemPrompt } from "./policy";
+import { buildSystemPrompt, TOPICS, PROJECT_TYPES, BUDGET_BANDS } from "./policy";
 
 export interface ChatTurn {
   role: "user" | "model";
@@ -13,12 +13,17 @@ export interface StructuredChatReply {
   extractedFields: {
     name?: string;
     phone?: string;
+    /** One of PROJECT_TYPES — kept as a fixed vocabulary so charts group cleanly. */
     projectType?: string;
+    /** The customer's own wording, for staff to read. */
+    projectDetail?: string;
+    /** One of BUDGET_BANDS. */
     budgetRange?: string;
     location?: string;
     timeline?: string;
     contactNote?: string;
   };
+  /** One of TOPICS. */
   topic?: string;
   sentiment?: "positive" | "neutral" | "negative";
   needsHuman: boolean;
@@ -47,14 +52,30 @@ const responseSchema: ResponseSchema = {
       properties: {
         name: { type: SchemaType.STRING, nullable: true },
         phone: { type: SchemaType.STRING, nullable: true },
-        projectType: { type: SchemaType.STRING, nullable: true },
-        budgetRange: { type: SchemaType.STRING, nullable: true },
+        projectType: {
+          type: SchemaType.STRING,
+          enum: [...PROJECT_TYPES],
+          format: "enum",
+          nullable: true,
+        },
+        projectDetail: { type: SchemaType.STRING, nullable: true },
+        budgetRange: {
+          type: SchemaType.STRING,
+          enum: [...BUDGET_BANDS],
+          format: "enum",
+          nullable: true,
+        },
         location: { type: SchemaType.STRING, nullable: true },
         timeline: { type: SchemaType.STRING, nullable: true },
         contactNote: { type: SchemaType.STRING, nullable: true },
       },
     },
-    topic: { type: SchemaType.STRING, nullable: true },
+    topic: {
+      type: SchemaType.STRING,
+      enum: [...TOPICS],
+      format: "enum",
+      nullable: true,
+    },
     sentiment: {
       type: SchemaType.STRING,
       enum: ["positive", "neutral", "negative"],
@@ -73,7 +94,7 @@ const responseSchema: ResponseSchema = {
 };
 
 export const MAX_BUBBLES = 3;
-const MAX_BUBBLE_CHARS = 220;
+const MAX_BUBBLE_CHARS = 200;
 
 // Guards against the model ignoring the bubble limits: drops empties, splits an
 // over-long bubble at a sentence boundary rather than mid-word, and never sends

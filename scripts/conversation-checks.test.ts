@@ -57,7 +57,7 @@ test("normalizeBubbles drops empties, caps the count, and splits long text at wh
   const long = normalizeBubbles(["คำ ".repeat(200)]);
   assert.ok(long.length > 1, "ข้อความยาวต้องถูกหั่นเป็นหลายฟอง");
   assert.ok(
-    long.every((bubble) => bubble.length <= 220),
+    long.every((bubble) => bubble.length <= 200),
     "ทุกฟองต้องไม่เกินลิมิต",
   );
   assert.ok(
@@ -152,4 +152,57 @@ test("model selection treats a blank env var as unset, and runs one model by def
     if (saved.fallback === undefined) delete process.env.GEMINI_FALLBACK_MODEL;
     else process.env.GEMINI_FALLBACK_MODEL = saved.fallback;
   }
+});
+
+test("templated purpose clauses are caught, using the real replies from the run", () => {
+  // Every one of these was circled by the business in the first soak test.
+  const scripted = [
+    "เพื่อให้ทีมงานดูแลได้ตรงจุด ขออนุญาตเก็บข้อมูลเบื้องต้นนะคะ",
+    "เพื่อให้ทีมงานประเมินเบื้องต้นได้แม่นยำขึ้น ไม่ทราบว่าพื้นที่อยู่ที่ไหนคะ",
+    "เพื่อให้ทีมงานเตรียมข้อมูลได้ครบถ้วน รบกวนแจ้งเบอร์ติดต่อค่ะ",
+    "To help me assist you better, could you tell me more about the project?",
+  ];
+  for (const reply of scripted) {
+    const first = runAllChecks([reply], "สนใจต่อเติมครับ", { turnIndex: 0, previousReplies: [] });
+    assert.ok(
+      first.some((v) => v.rule === "scripted-phrasing"),
+      `ควรถูกจับว่าเป็นวลีสำเร็จรูป: "${reply}"`,
+    );
+  }
+
+  // Once is a warning; the same device again in the same conversation is an error.
+  const repeated = runAllChecks(["เพื่อให้ทีมงานเตรียมข้อมูลได้ครบถ้วน รบกวนขอเบอร์ค่ะ"], "ได้ครับ", {
+    turnIndex: 1,
+    previousReplies: [["เพื่อให้ทีมงานดูแลได้ตรงจุด ขอถามรายละเอียดนะคะ"]],
+  });
+  assert.ok(repeated.some((v) => v.rule === "scripted-phrasing" && v.severity === "error"));
+
+  // Asking directly is what we want and must stay clean.
+  assert.deepEqual(
+    rulesFor(["รับทราบค่ะ ต่อเติมครัวนะคะ", "พื้นที่ประมาณกี่ตารางเมตรคะ"], "อยากต่อเติมครัว"),
+    [],
+  );
+});
+
+test("repeating its own name after the introduction is caught", () => {
+  // Introducing itself on the first turn is fine.
+  assert.deepEqual(
+    runAllChecks(["สวัสดีค่ะ Ady ผู้ช่วย AI ของ A5 Design ค่ะ"], "สวัสดี", {
+      turnIndex: 0,
+      previousReplies: [],
+    }).filter((v) => v.rule === "self-name"),
+    [],
+  );
+
+  const later = runAllChecks(["Ady ได้บันทึกเบอร์โทรไว้แล้วค่ะ"], "เบอร์ผม 081-234-5678", {
+    turnIndex: 2,
+    previousReplies: [["สวัสดีค่ะ"], ["รับทราบค่ะ"]],
+  });
+  assert.ok(later.some((v) => v.rule === "self-name" && v.severity === "warning"));
+
+  const twice = runAllChecks(["Ady เข้าใจค่ะ", "Ady จะรีบประสานให้นะคะ"], "ช่วยด้วย", {
+    turnIndex: 1,
+    previousReplies: [["สวัสดีค่ะ"]],
+  });
+  assert.ok(twice.some((v) => v.rule === "self-name" && v.severity === "error"));
 });

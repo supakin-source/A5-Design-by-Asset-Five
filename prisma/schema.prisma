@@ -30,7 +30,11 @@ model Lead {
   lineUserId  String     @unique
   displayName String?
   phone       String?
-  projectType String? // e.g. "บ้านเดี่ยว", "รีโนเวท", "อาคารพาณิชย์", "ออกแบบอย่างเดียว"
+  // One of PROJECT_TYPES in src/lib/policy.ts — a fixed vocabulary so the
+  // dashboard groups cleanly instead of splitting one category across wordings.
+  projectType String?
+  // The customer's own description, e.g. "ต่อเติมครัวหลังบ้าน 20 ตร.ม."
+  projectDetail String?
   budgetRange String?
   location    String?
   timeline    String?

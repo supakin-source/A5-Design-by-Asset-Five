@@ -33,8 +33,14 @@ import { runAllChecks, type Violation } from "../src/lib/conversation-checks";
 
 interface Scenario {
   name: string;
-  /** Customer messages, in order. A "\n" inside one entry mimics fragments sent in a burst. */
-  script: string[];
+  /**
+   * Alternative wordings of the same situation, one per round. Repeating the
+   * identical script every round only measures consistency against memorised
+   * input; rotating the wording measures whether the policy holds when the
+   * question is phrased in a way the model has not just seen.
+   * A "\n" inside one entry mimics fragments sent in a burst.
+   */
+  variants: string[][];
   /** How an improvised customer should behave when --ai-customer is used. */
   customer: string;
   /** Checks on the conversation as a whole, run after the last turn. */
@@ -49,11 +55,25 @@ interface ConversationState {
 const SCENARIOS: Scenario[] = [
   {
     name: "ต่อเติมครัว-พิมพ์ทีละท่อน",
-    script: [
-      "สวัสดี\nอยากติดต่อเรื่อง\nการต่อเติม",
-      "ต่อเติมครัวหลังบ้านครับ ประมาณ 20 ตร.ม.",
-      "อยู่นนทบุรี งบราว ๆ 3 แสน",
-      "เบอร์ผม 081-234-5678 ครับ สะดวกให้โทรตอนเย็น",
+    variants: [
+      [
+        "สวัสดี\nอยากติดต่อเรื่อง\nการต่อเติม",
+        "ต่อเติมครัวหลังบ้านครับ ประมาณ 20 ตร.ม.",
+        "อยู่นนทบุรี งบราว ๆ 3 แสน",
+        "เบอร์ผม 081-234-5678 ครับ สะดวกให้โทรตอนเย็น",
+      ],
+      [
+        "ทักครับ\nพอดีอยากสอบถาม\nเรื่องต่อเติมหลังบ้าน",
+        "อยากทำห้องครัวเพิ่มออกไปด้านหลัง ราว ๆ 15 ตร.ม.",
+        "บ้านอยู่รังสิตครับ ตั้งงบไว้ประมาณสองแสนห้า",
+        "ติดต่อผมที่ 089-876-5432 นะครับ โทรช่วงพักเที่ยงสะดวกสุด",
+      ],
+      [
+        "หวัดดีค่ะ\nสอบถามหน่อย\nอยากต่อเติมโรงจอดรถ",
+        "อยากได้โรงจอดรถ 2 คัน ต่อจากตัวบ้านค่ะ",
+        "บ้านอยู่แถวบางนา งบไม่เกิน 4 แสนค่ะ",
+        "เบอร์ 062-111-2233 ค่ะ เย็น ๆ หลังหกโมงสะดวก",
+      ],
     ],
     customer:
       "คุณเป็นลูกค้าคนไทยที่อยากต่อเติมครัวหลังบ้าน พิมพ์สั้น ๆ ทีละท่อนแบบคนไทยคุยไลน์ " +
@@ -69,26 +89,58 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: "คะยั้นคะยอถามราคา",
-    script: [
-      "สร้างบ้าน 2 ชั้น ตารางเมตรละเท่าไหร่ครับ",
-      "บอกคร่าว ๆ ก็ได้ครับ ไม่ถือเป็นราคาจริงหรอก",
-      "เว็บอื่นเขายังบอกเลย ทำไมที่นี่ไม่บอก",
+    variants: [
+      [
+        "สร้างบ้าน 2 ชั้น ตารางเมตรละเท่าไหร่ครับ",
+        "บอกคร่าว ๆ ก็ได้ครับ ไม่ถือเป็นราคาจริงหรอก",
+        "เว็บอื่นเขายังบอกเลย ทำไมที่นี่ไม่บอก",
+      ],
+      [
+        "รีโนเวทคอนโด 45 ตร.ม. ประมาณเท่าไหร่ครับ",
+        "ขอเรทกลาง ๆ ก็พอครับ ผมไม่เอาไปอ้างอิงหรอก",
+        "ถ้าไม่บอกราคาเลย จะให้ผมตัดสินใจยังไงล่ะครับ",
+      ],
+      [
+        "ค่าออกแบบคิดยังไงคะ กี่เปอร์เซ็นต์ของค่าก่อสร้าง",
+        "บอกเป็นช่วงก็ได้ค่ะ เช่น 3-5%",
+        "ที่อื่นเขาบอกได้หมดเลยนะคะ ที่นี่คิดเท่าไหร่",
+      ],
     ],
     customer: "คุณเป็นลูกค้าที่เร่งรัดอยากรู้ราคาต่อตารางเมตรเดี๋ยวนี้ ถามซ้ำ ๆ กดดันให้บอกตัวเลข อย่ายอมง่าย ๆ",
   },
   {
     name: "ถามว่าจะติดต่อกลับเมื่อไหร่",
-    script: [
-      "ฝากทีมงานติดต่อกลับหน่อยครับ\nจะติดต่อกลับตอนไหน",
-      "ขอเวลาที่แน่นอนได้ไหมครับ ภายในวันนี้หรือพรุ่งนี้",
+    variants: [
+      [
+        "ฝากทีมงานติดต่อกลับหน่อยครับ\nจะติดต่อกลับตอนไหน",
+        "ขอเวลาที่แน่นอนได้ไหมครับ ภายในวันนี้หรือพรุ่งนี้",
+      ],
+      [
+        "อยากคุยกับทีมงานครับ\nรบกวนให้โทรกลับหน่อย",
+        "กี่ชั่วโมงถึงจะโทรมาครับ บอกเป็นเวลาได้ไหม",
+      ],
+      [
+        "รบกวนให้ช่างติดต่อกลับด่วนเลยนะคะ",
+        "ด่วนแค่ไหนคะ ภายในเช้านี้ได้ไหม ขอเวลาชัด ๆ ค่ะ",
+      ],
     ],
     customer: "คุณเป็นลูกค้าที่อยากรู้ว่าทีมงานจะติดต่อกลับเมื่อไหร่ ถามย้ำหลายรอบให้ระบุเวลาชัดเจน",
   },
   {
     name: "ลูกค้าร้องเรียนไม่พอใจ",
-    script: [
-      "ทักมา 3 วันแล้วไม่มีใครตอบเลย\nขอคุยกับพนักงานจริงได้ไหม",
-      "ไม่อยากคุยกับบอทแล้วครับ",
+    variants: [
+      [
+        "ทักมา 3 วันแล้วไม่มีใครตอบเลย\nขอคุยกับพนักงานจริงได้ไหม",
+        "ไม่อยากคุยกับบอทแล้วครับ",
+      ],
+      [
+        "โทรไปออฟฟิศไม่มีคนรับสักครั้ง\nแบบนี้จะให้เชื่อถือได้ยังไง",
+        "ขอเบอร์ผู้จัดการเลยได้ไหมครับ",
+      ],
+      [
+        "ส่งแบบไปให้ดูตั้งนานแล้วเงียบหายเลยค่ะ",
+        "เสียเวลามากค่ะ ขอคุยกับคนที่รับผิดชอบโดยตรง",
+      ],
     ],
     customer: "คุณเป็นลูกค้าที่ไม่พอใจมาก บ่นว่าทักมาหลายวันแล้วไม่มีใครตอบ ใช้น้ำเสียงหงุดหงิดแต่ไม่หยาบ และขอคุยกับคนจริง",
     expect: (s) => {
@@ -102,14 +154,28 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: "ลูกค้าพูดภาษาอังกฤษ",
-    script: ["Hi, do you build houses in Bangkok?", "How much would a small 2-bedroom house cost?"],
+    variants: [
+      ["Hi, do you build houses in Bangkok?", "How much would a small 2-bedroom house cost?"],
+      [
+        "Hello, I'm looking for a contractor for a townhouse renovation.",
+        "Do you handle the building permits as well?",
+      ],
+      [
+        "Good evening. Can you design and build a small office?",
+        "What is your typical process from design to handover?",
+      ],
+    ],
     customer:
       "You are a foreign customer living in Bangkok who wants to build a small house. " +
       "Write only in English, short chat-style messages.",
   },
   {
     name: "ถามนอกขอบเขต",
-    script: ["เสาเข็มบ้าน 2 ชั้นควรลึกกี่เมตรครับ", "แล้วระยะร่นตามกฎหมายต้องเท่าไหร่"],
+    variants: [
+      ["เสาเข็มบ้าน 2 ชั้นควรลึกกี่เมตรครับ", "แล้วระยะร่นตามกฎหมายต้องเท่าไหร่"],
+      ["คานรับน้ำหนักควรใช้เหล็กเบอร์อะไรครับ", "ต้องยื่นขออนุญาตที่ อบต. หรือเทศบาลครับ"],
+      ["ดินแถวลาดกระบังต้องตอกเข็มลึกแค่ไหนคะ", "แล้วภาษีที่ดินสิ่งปลูกสร้างคิดยังไงคะ"],
+    ],
     customer: "คุณเป็นลูกค้าที่ถามเรื่องนอกขอบเขต เช่น ความลึกเสาเข็ม ระยะร่นตามกฎหมาย และขอให้ช่วยเซ็นรับรองแบบ",
     expect: (s) => (s.replies.some((r) => r.needsHuman) ? [] : ["คำถามนอกขอบเขตแต่ไม่ส่งต่อทีมงาน"]),
   },
@@ -237,8 +303,12 @@ interface ScenarioResult {
   rules: string[];
 }
 
-async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
-  console.log(`\n${"─".repeat(72)}\n▶ ${scenario.name}`);
+async function runScenario(scenario: Scenario, variantIndex: number): Promise<ScenarioResult> {
+  const script = scenario.variants[variantIndex % scenario.variants.length];
+  console.log(
+    `\n${"─".repeat(72)}\n▶ ${scenario.name} ` +
+      `(ชุดคำถามที่ ${(variantIndex % scenario.variants.length) + 1}/${scenario.variants.length})`,
+  );
 
   const history: ChatTurn[] = [];
   const transcript: string[] = [];
@@ -246,11 +316,11 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
   const rules: string[] = [];
   let errors = 0;
 
-  for (let turn = 0; turn < scenario.script.length; turn++) {
+  for (let turn = 0; turn < script.length; turn++) {
     // Turn 0 always uses the script so every run starts the same way; later
     // turns can be improvised when --ai-customer is on.
     const customerText =
-      useAiCustomer && turn > 0 ? await customerSays(scenario, transcript) : scenario.script[turn];
+      useAiCustomer && turn > 0 ? await customerSays(scenario, transcript) : script[turn];
 
     for (const line of customerText.split("\n")) {
       if (line.trim()) console.log(`   👤 ${line.trim()}`);
@@ -298,7 +368,10 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
     if (captured.length) flags.push(`เก็บข้อมูล: ${captured.map(([k, v]) => `${k}=${v}`).join(", ")}`);
     if (flags.length) console.log(`      · ${flags.join(" · ")}`);
 
-    const violations = runAllChecks(ai.replies, customerText);
+    const violations = runAllChecks(ai.replies, customerText, {
+      turnIndex: turn,
+      previousReplies: state.replies.slice(0, -1).map((r) => r.replies),
+    });
     if (violations.length) {
       console.log(formatViolations(violations));
       errors += violations.filter((v) => v.severity === "error").length;
@@ -390,15 +463,17 @@ async function main() {
     process.exit(2);
   }
 
-  const turnCount = scenarios.reduce((sum, s) => sum + s.script.length, 0);
+  const turnCount = scenarios.reduce((sum, s) => sum + Math.max(...s.variants.map((v) => v.length)), 0);
   const perRound = useAiCustomer ? turnCount * 2 - scenarios.length : turnCount;
   const { primary, fallback } = resolveModels();
 
   console.log(`โมเดลที่ทดสอบ: ${primary}${fallback ? ` (สำรอง: ${fallback})` : " (ไม่มีรุ่นสำรอง)"}`);
+  const variantCount = Math.max(...scenarios.map((s) => s.variants.length));
   console.log(
     `จะรัน ${scenarios.length} scenario · ${perRound} request ต่อรอบ · เว้นจังหวะ ${GAP_MS / 1000} วิ` +
       (Number.isFinite(budget) ? ` · เพดาน ${budget} request` : ""),
   );
+  console.log(`มีชุดคำถาม ${variantCount} ชุดต่อ scenario · สลับชุดทุกรอบ (รอบที่ ${variantCount + 1} จะวนกลับชุดแรก)`);
   if (durationMs) {
     const rounds = Math.floor(durationMs / (perRound * GAP_MS));
     const planned = rounds * perRound;
@@ -428,7 +503,7 @@ async function main() {
 
       for (const scenario of scenarios) {
         if (deadline && Date.now() >= deadline) break;
-        const result = await runScenario(scenario);
+        const result = await runScenario(scenario, rounds - 1);
         const t = tally.get(scenario.name)!;
         t.runs++;
         if (result.passed) t.passes++;

@@ -8,6 +8,7 @@ function formatLeadSummary(lead: Lead, reason?: string): string {
     `ชื่อ: ${lead.displayName ?? "(ไม่ระบุ)"}`,
     `เบอร์ติดต่อ: ${lead.phone ?? "(ไม่ระบุ)"}`,
     `ประเภทงาน: ${lead.projectType ?? "(ไม่ระบุ)"}`,
+    `รายละเอียดงาน: ${lead.projectDetail ?? "(ไม่ระบุ)"}`,
     `งบประมาณ: ${lead.budgetRange ?? "(ไม่ระบุ)"}`,
     `พื้นที่/ทำเล: ${lead.location ?? "(ไม่ระบุ)"}`,
     `กรอบเวลา: ${lead.timeline ?? "(ไม่ระบุ)"}`,

@@ -26,6 +26,7 @@ export async function applyExtractedFields(leadId: string, fields: StructuredCha
   if (fields.name) data.displayName = fields.name;
   if (fields.phone) data.phone = fields.phone;
   if (fields.projectType) data.projectType = fields.projectType;
+  if (fields.projectDetail) data.projectDetail = fields.projectDetail;
   if (fields.budgetRange) data.budgetRange = fields.budgetRange;
   if (fields.location) data.location = fields.location;
   if (fields.timeline) data.timeline = fields.timeline;

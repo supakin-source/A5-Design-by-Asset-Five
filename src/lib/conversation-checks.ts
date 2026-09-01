@@ -4,6 +4,7 @@
 // can be unit-tested on their own.
 
 import { MAX_BUBBLES } from "./gemini";
+import { PERSONA } from "./policy";
 
 export type Severity = "error" | "warning";
 
@@ -14,7 +15,7 @@ export interface Violation {
 }
 
 const SOFT_BUBBLE_CHARS = 160;
-const HARD_BUBBLE_CHARS = 220;
+const HARD_BUBBLE_CHARS = 200;
 
 export function checkBubbleShape(bubbles: string[]): Violation[] {
   const violations: Violation[] = [];
@@ -130,11 +131,91 @@ export function checkLanguageMatch(bubbles: string[], customerText: string): Vio
   return [];
 }
 
-export function runAllChecks(bubbles: string[], customerText: string): Violation[] {
+// Templated "here is why I'm asking" openers. One is tolerable; the same device
+// on every turn is what makes a bot read like a script being recited.
+const PURPOSE_CLAUSES = [
+  /เพื่อให้ทีม\s*งาน/,
+  /เพื่อให้ข้อมูล/,
+  /เพื่อให้การประเมิน/,
+  /เพื่อความถูกต้อง/,
+  /เพื่อประกอบการ/,
+  /to (?:help|better help) me/i,
+  /in order to (?:better )?(?:serve|assist|help)/i,
+  /so (?:that )?our team can/i,
+];
+
+function countPurposeClauses(text: string): number {
+  return PURPOSE_CLAUSES.reduce((total, pattern) => {
+    const matches = text.match(new RegExp(pattern.source, pattern.flags.includes("i") ? "gi" : "g"));
+    return total + (matches?.length ?? 0);
+  }, 0);
+}
+
+export interface ConversationContext {
+  /** 0 for the first turn of the conversation. */
+  turnIndex: number;
+  /** Bubbles the bot has already sent in this conversation, newest last. */
+  previousReplies: string[][];
+}
+
+export function checkNotScripted(bubbles: string[], context?: ConversationContext): Violation[] {
+  const violations: Violation[] = [];
+  const text = bubbles.join(" ");
+
+  const here = countPurposeClauses(text);
+  const earlier = (context?.previousReplies ?? []).filter((reply) => countPurposeClauses(reply.join(" ")) > 0).length;
+
+  if (here > 1) {
+    violations.push({
+      rule: "scripted-phrasing",
+      severity: "error",
+      detail: `ใช้วลีอธิบายเหตุผลสำเร็จรูป ${here} ครั้งในคำตอบเดียว`,
+    });
+  } else if (here === 1 && earlier > 0) {
+    violations.push({
+      rule: "scripted-phrasing",
+      severity: "error",
+      detail: `ใช้วลีอธิบายเหตุผลสำเร็จรูปซ้ำ (เคยใช้มาแล้ว ${earlier} เทิร์นในบทสนทนานี้)`,
+    });
+  } else if (here === 1) {
+    violations.push({
+      rule: "scripted-phrasing",
+      severity: "warning",
+      detail: "ขึ้นต้นด้วยวลีอธิบายเหตุผล — ถามตรง ๆ จะเป็นธรรมชาติกว่า",
+    });
+  }
+
+  // Saying its own name every turn reads like a script; it belongs in the
+  // introduction only.
+  const nameMatches = text.match(new RegExp(PERSONA.name, "g"))?.length ?? 0;
+  const isFirstTurn = (context?.turnIndex ?? 0) === 0;
+  if (nameMatches >= 2) {
+    violations.push({
+      rule: "self-name",
+      severity: "error",
+      detail: `เอ่ยชื่อ "${PERSONA.name}" ${nameMatches} ครั้งในคำตอบเดียว`,
+    });
+  } else if (nameMatches === 1 && !isFirstTurn) {
+    violations.push({
+      rule: "self-name",
+      severity: "warning",
+      detail: `เอ่ยชื่อ "${PERSONA.name}" หลังแนะนำตัวไปแล้ว`,
+    });
+  }
+
+  return violations;
+}
+
+export function runAllChecks(
+  bubbles: string[],
+  customerText: string,
+  context?: ConversationContext,
+): Violation[] {
   return [
     ...checkBubbleShape(bubbles),
     ...checkNoCallbackPromise(bubbles),
     ...checkNoPriceQuote(bubbles, customerText),
     ...checkLanguageMatch(bubbles, customerText),
+    ...checkNotScripted(bubbles, context),
   ];
 }

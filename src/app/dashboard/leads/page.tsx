@@ -23,6 +23,7 @@ export default async function LeadsPage() {
                   <th>ลูกค้า</th>
                   <th>เบอร์ติดต่อ</th>
                   <th>ประเภทงาน</th>
+                  <th>รายละเอียด</th>
                   <th>งบประมาณ</th>
                   <th>พื้นที่</th>
                   <th>กรอบเวลา</th>
@@ -38,6 +39,7 @@ export default async function LeadsPage() {
                     </td>
                     <td>{lead.phone ?? "—"}</td>
                     <td>{lead.projectType ?? "—"}</td>
+                    <td style={{ whiteSpace: "normal", maxWidth: 260 }}>{lead.projectDetail ?? "—"}</td>
                     <td>{lead.budgetRange ?? "—"}</td>
                     <td>{lead.location ?? "—"}</td>
                     <td>{lead.timeline ?? "—"}</td>
