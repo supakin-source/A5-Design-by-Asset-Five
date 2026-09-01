@@ -161,6 +161,20 @@ export function isQuotaError(err: unknown): boolean {
   return /\b429\b/.test(message) || /quota|rate limit|too many requests/i.test(message);
 }
 
+// Google's shared infrastructure rejecting the request under load — distinct
+// from OUR quota (429) being spent. Also transient, so also worth one retry,
+// but reported separately: "the model is congested" is a different signal from
+// "today's allowance is gone" and calls for a different response.
+export function isOverloadedError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b503\b/.test(message) || /overloaded|unavailable|high demand/i.test(message);
+}
+
+// Either kind of transient failure — worth waiting out once before giving up.
+export function isTransientAiError(err: unknown): boolean {
+  return isQuotaError(err) || isOverloadedError(err);
+}
+
 type Contents = Array<{ role: string; parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> }>;
 
 // Every actual call to the API, including a retry on the fallback model. The

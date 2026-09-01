@@ -18,13 +18,16 @@
  *
  * LINE is not involved — this exercises the conversation, not the webhook.
  * Exit codes: 0 pass, 1 policy failures or an AI error, 2 bad usage,
- * 3 quota exhausted or the --budget ceiling reached.
+ * 3 quota exhausted, the model overloaded (503) past a retry, or the
+ * --budget ceiling reached.
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   generateChatReply,
   resolveModels,
   isQuotaError,
+  isOverloadedError,
+  isTransientAiError,
   geminiRequestsMade,
   type ChatTurn,
   type StructuredChatReply,
@@ -266,6 +269,15 @@ class QuotaExhausted extends Error {
   }
 }
 
+// Google's shared infra, not our allowance — same "wait and retry once" shape
+// as a quota error, but reported separately since it says nothing about how
+// much of today's allowance is left.
+class ModelOverloaded extends Error {
+  constructor(reason: string) {
+    super(reason);
+  }
+}
+
 function asQuotaError(err: unknown): QuotaExhausted | null {
   const message = err instanceof Error ? err.message : String(err);
   if (!isQuotaError(message)) return null;
@@ -341,20 +353,22 @@ async function runScenario(scenario: Scenario, variantIndex: number): Promise<Sc
     // not confused with a wrong model id.
     if (ai.escalationReason === "ai_unavailable") {
       const reason = ai.failure ?? "ไม่ทราบสาเหตุ";
-      if (!isQuotaError(reason)) throw new Error(`เรียก AI ไม่สำเร็จ: ${reason}`);
+      if (!isTransientAiError(reason)) throw new Error(`เรียก AI ไม่สำเร็จ: ${reason}`);
 
-      // A per-minute limit clears on its own, so wait it out once before
-      // concluding the daily allowance is gone.
-      const quota = asQuotaError(reason) ?? new QuotaExhausted();
-      const waitMs = retryDelayMs(quota.retryAfter);
-      console.log(`      ⏳ โดนจำกัดอัตราการเรียก รอ ${Math.round(waitMs / 1000)} วินาทีแล้วลองใหม่`);
+      // Both a per-minute quota limit and a "high demand" 503 clear on their
+      // own, so wait once before concluding the failure is permanent.
+      const quota = isQuotaError(reason) ? asQuotaError(reason) ?? new QuotaExhausted() : null;
+      const waitMs = quota ? retryDelayMs(quota.retryAfter) : retryDelayMs();
+      const label = quota ? "โดนจำกัดอัตราการเรียก" : "โมเดลกำลังโดนใช้งานหนัก (503)";
+      console.log(`      ⏳ ${label} รอ ${Math.round(waitMs / 1000)} วินาทีแล้วลองใหม่`);
       await sleep(waitMs);
       lastRequestAt = Date.now();
       ai = await generateChatReply({ history, userMessage: customerText });
       if (ai.escalationReason === "ai_unavailable") {
         const retryReason = ai.failure ?? "ไม่ทราบสาเหตุ";
-        if (!isQuotaError(retryReason)) throw new Error(`เรียก AI ไม่สำเร็จ: ${retryReason}`);
-        throw asQuotaError(retryReason) ?? new QuotaExhausted();
+        if (isQuotaError(retryReason)) throw asQuotaError(retryReason) ?? new QuotaExhausted();
+        if (isOverloadedError(retryReason)) throw new ModelOverloaded(retryReason);
+        throw new Error(`เรียก AI ไม่สำเร็จ: ${retryReason}`);
       }
     }
     state.replies.push(ai);
@@ -406,6 +420,18 @@ function reportAiFailure(err: unknown) {
     console.error("   ดูรายชื่อรุ่นที่ key ใช้ได้จริง:");
     console.error("   https://generativelanguage.googleapis.com/v1beta/models?key=<GEMINI_API_KEY>");
   }
+}
+
+// The model's shared infra was overloaded on both the first try and the retry
+// after waiting — a longer-lived spike, not a one-off blip.
+function reportOverloaded(overloaded: ModelOverloaded, done: number, total: number) {
+  console.error(`\n${"═".repeat(72)}`);
+  console.error("⛔ โมเดลโดนใช้งานหนักต่อเนื่อง (503) — หยุดการทดสอบ");
+  console.error(`   รันไปแล้ว ${done}/${total} scenario · ใช้ไป ${totalRequests()} request`);
+  console.error(`   ${overloaded.message}`);
+  console.error("");
+  console.error("   ลองใหม่แล้วครั้งหนึ่งแต่ยังโดนอยู่ น่าจะเป็นความหนาแน่นฝั่ง Google ไม่ใช่โควตาเรา");
+  console.error("   รอสักพักแล้วรันใหม่ได้เลย — โควตารายวันยังไม่ถูกใช้ไปเพราะเหตุนี้");
 }
 
 function reportQuotaExhausted(quota: QuotaExhausted, done: number, total: number) {
@@ -522,6 +548,11 @@ async function main() {
       printSummary(tally, startedAt, rounds);
       process.exit(3);
     }
+    if (err instanceof ModelOverloaded) {
+      reportOverloaded(err, rounds, rounds);
+      printSummary(tally, startedAt, rounds);
+      process.exit(3);
+    }
     reportAiFailure(err);
     printSummary(tally, startedAt, rounds);
     process.exit(1);
@@ -535,6 +566,10 @@ main().catch((err) => {
   const quota = asQuotaError(err);
   if (quota) {
     reportQuotaExhausted(quota, 0, SCENARIOS.length);
+    process.exit(3);
+  }
+  if (err instanceof ModelOverloaded) {
+    reportOverloaded(err, 0, SCENARIOS.length);
     process.exit(3);
   }
   console.error(err);
