@@ -37,6 +37,11 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      # Policy checks on the bot's replies. No API key needed — these test the
+      # rules themselves, not a live conversation (see the chat-test workflow).
+      - name: Unit tests
+        run: npm test
+
       # `next build` also runs the TypeScript typecheck.
       - name: Build
         run: npx next build

@@ -9,7 +9,9 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "test": "tsx --test scripts/*.test.ts",
+    "test:chat": "tsx scripts/simulate-chat.ts"
   },
   "//allowScripts": "npm 12+ blocks install scripts until approved. Prisma's postinstall downloads the query and schema engine binaries, without which `prisma generate` and `prisma migrate deploy` fail during the Vercel build; esbuild's installs the binary tsx needs for the seed script.",
   "allowScripts": {

@@ -1,0 +1,33 @@
+name: Chat test
+
+# Run by hand from the Actions tab: an AI plays the customer across several
+# scenarios and talks to the real bot prompt, then the transcript and any policy
+# breaks appear in the run log. Needs the GEMINI_API_KEY repository secret.
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "รันเฉพาะ scenario ที่ชื่อมีคำนี้ (เว้นว่าง = รันทั้งหมด)"
+        required: false
+        type: string
+
+jobs:
+  chat:
+    name: Simulated conversations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Talk to the bot
+        run: npm run test:chat -- "${{ inputs.scenario }}"
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
