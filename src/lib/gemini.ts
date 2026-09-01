@@ -108,6 +108,22 @@ function getClient(): GoogleGenerativeAI {
   return client;
 }
 
+export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+export const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash";
+
+// Which model answers, and which one takes over when the first is out of quota.
+// An env var that is present but blank (easy to produce from a CI input or a
+// hosting dashboard) counts as unset rather than as an empty model id.
+export function resolveModels(): { primary: string; fallback: string } {
+  const primary = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  const configuredFallback = process.env.GEMINI_FALLBACK_MODEL?.trim();
+  // Keep a usable fallback when the primary has been switched to what would
+  // otherwise be the fallback.
+  const fallback =
+    configuredFallback || (primary === DEFAULT_FALLBACK_MODEL ? DEFAULT_MODEL : DEFAULT_FALLBACK_MODEL);
+  return { primary, fallback };
+}
+
 // A daily-quota rejection, as opposed to a bad request or a network blip. The
 // SDK surfaces these as a message string, so match on both the status and the
 // quota wording rather than a typed field.
@@ -155,8 +171,7 @@ export async function generateChatReply(params: {
     { role: "user" as const, parts: userParts },
   ];
 
-  const primary = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
-  const fallback = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3.5-flash";
+  const { primary, fallback } = resolveModels();
 
   // Any AI failure (quota exhausted on the free tier, network error, or a reply
   // that doesn't match the schema) falls back to a human handoff, so the

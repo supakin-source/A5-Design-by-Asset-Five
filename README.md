@@ -173,8 +173,11 @@ production) แล้วตรวจกฎอัตโนมัติทุก�
 
 1. ใส่ API key ครั้งเดียว: repo → **Settings → Secrets and variables → Actions →
    New repository secret** ชื่อ `GEMINI_API_KEY`
-2. ไปแท็บ **Actions → Chat test → Run workflow** (ใส่ชื่อ scenario บางส่วนเพื่อรัน
-   เฉพาะอันนั้นได้ เว้นว่าง = รันทั้งหมด)
+2. ไปแท็บ **Actions → Chat test → Run workflow** แล้วกรอกช่องที่ต้องการ
+   - **model** — โมเดลที่จะทดสอบ เช่น `gemini-3.1-flash-lite` (เว้นว่าง = ใช้ค่าเริ่มต้น)
+     ใช้ช่องนี้เปรียบเทียบคุณภาพระหว่างรุ่นก่อนตัดสินใจเปลี่ยนใน production ได้
+   - **scenario** — ชื่อบางส่วนของ scenario ที่ต้องการรัน (เว้นว่าง = รันทั้งหมด)
+   - **ai_customer** — ให้ AI ด้นบทลูกค้าเอง (ใช้โควตาเกือบสองเท่า)
 3. อ่านบทสนทนาและผลตรวจใน log ของ run นั้น
 
 **หรือรันในเครื่อง**

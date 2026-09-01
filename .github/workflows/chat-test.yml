@@ -6,6 +6,10 @@ name: Chat test
 on:
   workflow_dispatch:
     inputs:
+      model:
+        description: "โมเดลที่จะทดสอบ เช่น gemini-3.1-flash-lite (เว้นว่าง = ใช้ค่าเริ่มต้นของระบบ)"
+        required: false
+        type: string
       scenario:
         description: "รันเฉพาะ scenario ที่ชื่อมีคำนี้ (เว้นว่าง = รันทั้งหมด ~15 request)"
         required: false
@@ -35,4 +39,5 @@ jobs:
         run: npm run test:chat -- "${{ inputs.scenario }}" ${{ inputs.ai_customer && '--ai-customer' || '' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+          # Blank falls through to the code default, so the input can be left empty.
+          GEMINI_MODEL: ${{ inputs.model }}

@@ -18,7 +18,7 @@
  * Exit codes: 0 pass, 1 policy failures, 2 bad usage, 3 quota exhausted.
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { generateChatReply, type ChatTurn, type StructuredChatReply } from "../src/lib/gemini";
+import { generateChatReply, resolveModels, type ChatTurn, type StructuredChatReply } from "../src/lib/gemini";
 import { runAllChecks, type Violation } from "../src/lib/conversation-checks";
 
 interface Scenario {
@@ -137,7 +137,7 @@ function asQuotaError(err: unknown): QuotaExhausted | null {
 
 async function customerSays(scenario: Scenario, transcript: string[]): Promise<string> {
   const model = client.getGenerativeModel({
-    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+    model: resolveModels().primary,
     systemInstruction: `${scenario.customer}
 
 คุณกำลังแชทกับ LINE OA ของบริษัทรับออกแบบและก่อสร้าง ตอบกลับเป็นข้อความแชทสั้น ๆ
@@ -243,6 +243,8 @@ async function main() {
 
   const turnCount = scenarios.reduce((sum, s) => sum + s.script.length, 0);
   const estimate = useAiCustomer ? turnCount * 2 - scenarios.length : turnCount;
+  const { primary, fallback } = resolveModels();
+  console.log(`โมเดลที่ทดสอบ: ${primary} (สำรอง: ${fallback})`);
   console.log(`จะรัน ${scenarios.length} scenario · ใช้ประมาณ ${estimate} Gemini request`);
 
   const results: Array<[string, boolean]> = [];

@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAllChecks } from "../src/lib/conversation-checks";
-import { normalizeBubbles, isQuotaError, MAX_BUBBLES } from "../src/lib/gemini";
+import {
+  normalizeBubbles,
+  isQuotaError,
+  resolveModels,
+  MAX_BUBBLES,
+  DEFAULT_MODEL,
+  DEFAULT_FALLBACK_MODEL,
+} from "../src/lib/gemini";
 import { isPureAcknowledgement, isAcknowledgementOnlyBatch } from "../src/lib/acknowledgement";
 
 const rulesFor = (bubbles: string[], customerText: string) =>
@@ -116,4 +123,33 @@ test("a burst counts as closing only when every fragment is", () => {
   assert.ok(isAcknowledgementOnlyBatch(["ขอบคุณครับ", "👍"]));
   assert.ok(!isAcknowledgementOnlyBatch(["ขอบคุณครับ", "อ้อ แล้วต่อเติมครัวราคาเท่าไหร่"]));
   assert.ok(!isAcknowledgementOnlyBatch([]));
+});
+
+test("model selection treats a blank env var as unset", () => {
+  const saved = { model: process.env.GEMINI_MODEL, fallback: process.env.GEMINI_FALLBACK_MODEL };
+  try {
+    delete process.env.GEMINI_MODEL;
+    delete process.env.GEMINI_FALLBACK_MODEL;
+    assert.deepEqual(resolveModels(), { primary: DEFAULT_MODEL, fallback: DEFAULT_FALLBACK_MODEL });
+
+    // A CI input left empty arrives as "" and must not become the model id.
+    process.env.GEMINI_MODEL = "";
+    process.env.GEMINI_FALLBACK_MODEL = "   ";
+    assert.deepEqual(resolveModels(), { primary: DEFAULT_MODEL, fallback: DEFAULT_FALLBACK_MODEL });
+
+    process.env.GEMINI_MODEL = " gemini-3.1-flash-lite ";
+    assert.equal(resolveModels().primary, "gemini-3.1-flash-lite");
+
+    // Promoting the usual fallback to primary must still leave a different fallback.
+    process.env.GEMINI_MODEL = DEFAULT_FALLBACK_MODEL;
+    process.env.GEMINI_FALLBACK_MODEL = "";
+    const promoted = resolveModels();
+    assert.equal(promoted.primary, DEFAULT_FALLBACK_MODEL);
+    assert.notEqual(promoted.fallback, promoted.primary);
+  } finally {
+    if (saved.model === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = saved.model;
+    if (saved.fallback === undefined) delete process.env.GEMINI_FALLBACK_MODEL;
+    else process.env.GEMINI_FALLBACK_MODEL = saved.fallback;
+  }
 });
