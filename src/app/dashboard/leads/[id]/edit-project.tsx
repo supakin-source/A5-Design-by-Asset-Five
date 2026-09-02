@@ -101,7 +101,6 @@ export function EditProject({ project }: { project: EditableProject }) {
     return (
       <div className="card">
         <h2>ข้อมูลงานนี้</h2>
-        <p className="sub">บอทเก็บได้จากบทสนทนา</p>
         <div className="table-wrap">
           <table>
             <tbody>

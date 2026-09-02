@@ -5,8 +5,22 @@ import { StatusActions } from "../status-actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function LeadsPage() {
+export default async function LeadsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
+  const query = q?.trim();
+
   const projects = await prisma.project.findMany({
+    where: query
+      ? {
+          OR: [
+            { lead: { displayName: { contains: query, mode: "insensitive" } } },
+            { phone: { contains: query, mode: "insensitive" } },
+            { projectType: { contains: query, mode: "insensitive" } },
+            { projectDetail: { contains: query, mode: "insensitive" } },
+            { location: { contains: query, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
     include: { lead: true },
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -15,12 +29,22 @@ export default async function LeadsPage() {
   return (
     <>
       <h1 style={{ marginTop: 0 }}>รายการงาน</h1>
+
+      <form action="/dashboard/leads" className="search-bar">
+        <input name="q" defaultValue={query ?? ""} placeholder="ค้นหาชื่อ เบอร์ ประเภทงาน หรือทำเล" />
+        <button className="link-button" type="submit">
+          ค้นหา
+        </button>
+        {query && (
+          <Link href="/dashboard/leads" className="link-button" style={{ display: "flex", alignItems: "center" }}>
+            ล้าง
+          </Link>
+        )}
+      </form>
+
       <div className="card">
-        <p className="sub">
-          200 รายการล่าสุด · หนึ่งแถวคือหนึ่งงาน ลูกค้าเดิมที่กลับมาติดต่อใหม่จะขึ้นเป็นแถวใหม่ ไม่ทับงานเดิม
-        </p>
         {projects.length === 0 ? (
-          <p className="empty">ยังไม่มีงานเข้ามา</p>
+          <p className="empty">{query ? `ไม่พบงานที่ตรงกับ "${query}"` : "ยังไม่มีงานเข้ามา"}</p>
         ) : (
           <div className="table-wrap">
             <table>

@@ -50,7 +50,6 @@ export default async function OverviewPage() {
 
       <div className="card">
         <h2>ความเคลื่อนไหวล่าสุด</h2>
-        <p className="sub">10 งานที่อัปเดตล่าสุด</p>
         {recentProjects.length === 0 ? (
           <p className="empty">ยังไม่มีงานเข้ามา</p>
         ) : (

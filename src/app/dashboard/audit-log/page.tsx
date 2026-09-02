@@ -11,8 +11,17 @@ const ACTION_LABEL: Record<string, string> = {
   status: "เปลี่ยนสถานะ",
 };
 
-export default async function AuditLogPage() {
-  const entries = await prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+export default async function AuditLogPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
+  const query = q?.trim();
+
+  const entries = await prisma.auditLog.findMany({
+    where: query
+      ? { OR: [{ username: { contains: query, mode: "insensitive" } }, { detail: { contains: query, mode: "insensitive" } }] }
+      : undefined,
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
 
   // Name the job the way staff know it. A deleted or merged-away project has
   // neither a name nor a page to link to any more, so those rows say so
@@ -26,12 +35,22 @@ export default async function AuditLogPage() {
   return (
     <>
       <h1 style={{ marginTop: 0 }}>ประวัติการแก้ไข</h1>
+
+      <form action="/dashboard/audit-log" className="search-bar">
+        <input name="q" defaultValue={query ?? ""} placeholder="ค้นหาผู้ใช้หรือรายละเอียด" />
+        <button className="link-button" type="submit">
+          ค้นหา
+        </button>
+        {query && (
+          <Link href="/dashboard/audit-log" className="link-button" style={{ display: "flex", alignItems: "center" }}>
+            ล้าง
+          </Link>
+        )}
+      </form>
+
       <div className="card">
-        <p className="sub">
-          200 รายการล่าสุด · ใครแก้อะไร เมื่อไหร่ (บันทึกอัตโนมัติทุกครั้งที่ทีมงานแก้ไข ลบ รวมงาน หรือเปลี่ยนสถานะ)
-        </p>
         {entries.length === 0 ? (
-          <p className="empty">ยังไม่มีประวัติการแก้ไข</p>
+          <p className="empty">{query ? `ไม่พบรายการที่ตรงกับ "${query}"` : "ยังไม่มีประวัติการแก้ไข"}</p>
         ) : (
           <div className="table-wrap">
             <table>

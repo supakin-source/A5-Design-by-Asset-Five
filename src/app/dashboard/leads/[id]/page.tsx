@@ -82,7 +82,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
         <div className="card">
           <h2>แจ้งเตือนทีมงาน</h2>
-          <p className="sub">ประวัติการส่งต่องานนี้ให้ผู้รับผิดชอบ</p>
           {project.staffNotifications.length === 0 ? (
             <p className="empty">ยังไม่มีการส่งต่อ</p>
           ) : (
@@ -101,7 +100,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       {otherProjects.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h2>งานอื่นของลูกค้ารายนี้ ({otherProjects.length})</h2>
-          <p className="sub">ลูกค้าเดิมที่กลับมาติดต่อใหม่ · ถ้าแถวไหนเป็นงานเดียวกับที่กำลังดูอยู่ ให้กดรวมเข้าด้วยกัน</p>
+          <p className="sub">ถ้าแถวไหนเป็นงานเดียวกับที่กำลังดูอยู่ ให้กดรวมเข้าด้วยกัน</p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -137,20 +136,24 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className="card" style={{ marginTop: 16 }}>
         <h2>บทสนทนา</h2>
-        <p className="sub">รูปภาพที่ลูกค้าส่งมาจะแสดงเป็นคำอธิบายข้อความ ตามนโยบายข้อมูลส่วนบุคคล</p>
         {messages.length === 0 ? (
           <p className="empty">ยังไม่มีบทสนทนา</p>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} className={`bubble ${m.role === MessageRole.USER ? "user" : "bot"}`}>
-              <div className="meta">
-                {ROLE_LABEL[m.role]} • {formatDateTime(m.createdAt)}
-                {m.hasImage && " • ส่งรูปภาพ"}
-                {m.topic && ` • ${m.topic}`}
+          // Rendered newest-first with flex-direction: column-reverse (see
+          // .chat-scroll) so this scrolls independently of the page and
+          // defaults to showing the latest message, not the oldest.
+          <div className="chat-scroll">
+            {[...messages].reverse().map((m) => (
+              <div key={m.id} className={`bubble ${m.role === MessageRole.USER ? "user" : "bot"}`}>
+                <div className="meta">
+                  {ROLE_LABEL[m.role]} • {formatDateTime(m.createdAt)}
+                  {m.hasImage && " • ส่งรูปภาพ"}
+                  {m.topic && ` • ${m.topic}`}
+                </div>
+                <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
               </div>
-              <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </>

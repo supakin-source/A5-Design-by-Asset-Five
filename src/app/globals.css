@@ -468,3 +468,35 @@ form.login {
   color: var(--status-critical);
   font-size: 13px;
 }
+
+/* Search ---------------------------------------------------------------- */
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  max-width: 420px;
+}
+
+.search-bar input {
+  flex: 1;
+}
+
+/* Conversation scroll ----------------------------------------------------
+   Its own scroll region, independent of the page, defaulting to the latest
+   message: children are rendered newest-first and column-reverse flips them
+   back to normal reading order (oldest at top) while keeping the browser's
+   default scroll position pinned to the bottom. */
+
+.chat-scroll {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 60vh;
+  padding-right: 4px;
+}
+
+.chat-scroll .bubble {
+  margin-bottom: 0;
+}
