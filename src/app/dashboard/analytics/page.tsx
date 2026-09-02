@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MessageRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { CategoryBarChart, DailyLineChart, HourlyBarChart, type CategoryDatum } from "@/components/charts";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 const MAX_CATEGORIES = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 366;
+const PERIOD_PRESETS = [7, 30, 90] as const;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // "Today" and any day-key derived from a stored UTC timestamp are both
@@ -15,6 +17,13 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // viewer's.
 function thaiDateKey(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(d);
+}
+
+// The "from" date of the last N days ending on the given Thai-local today.
+function isoDaysBefore(todayIso: string, days: number): string {
+  const d = new Date(`${todayIso}T00:00:00+07:00`);
+  d.setUTCDate(d.getUTCDate() - (days - 1));
+  return thaiDateKey(d);
 }
 
 // Keeps charts readable: the long tail folds into one "อื่น ๆ" bar instead of
@@ -182,7 +191,26 @@ export default async function AnalyticsPage({
           title="งานที่ติดต่อเข้ามาต่อวัน"
           data={daily}
           valueLabel="งาน"
-          headerExtra={<DateRangePicker from={from} to={to} />}
+          headerExtra={
+            <>
+              <div className="segmented">
+                {PERIOD_PRESETS.map((d) => {
+                  const presetFrom = isoDaysBefore(today, d);
+                  const active = from === presetFrom && to === today;
+                  return (
+                    <Link
+                      key={d}
+                      href={`/dashboard/analytics?from=${presetFrom}&to=${today}`}
+                      aria-current={active ? "true" : undefined}
+                    >
+                      {d} วัน
+                    </Link>
+                  );
+                })}
+              </div>
+              <DateRangePicker from={from} to={to} />
+            </>
+          }
         />
         <CategoryBarChart title="ประเภทงานที่ลูกค้าสนใจ" data={projectTypes} valueLabel="จำนวนงาน" />
         <CategoryBarChart title="หัวข้อที่ลูกค้าถามบ่อย" data={topics} valueLabel="ข้อความ" />

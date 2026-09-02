@@ -29,19 +29,8 @@ function addMonths(year: number, month: number, delta: number): { year: number; 
 
 const MONTH_FORMAT = new Intl.DateTimeFormat("th-TH", { month: "long", year: "numeric" });
 const WEEKDAY_LABELS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
-const PRESETS = [
-  { label: "7 วันล่าสุด", days: 7 },
-  { label: "30 วันล่าสุด", days: 30 },
-  { label: "90 วันล่าสุด", days: 90 },
-];
 
-function isoDaysAgo(days: number): string {
-  const today = parseIso(todayThaiIso());
-  const d = new Date(today.year, today.month, today.day - (days - 1));
-  return iso(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-// One month grid of a two-month range calendar. Click-click (not real mouse
+// One month grid of a three-month range calendar. Click-click (not real mouse
 // drag) selects the range, with a hover preview between the anchor and the
 // pointer — the same feel as a booking site's range picker without the
 // fragility of real drag-and-drop on touch devices.
@@ -167,7 +156,8 @@ export function DateRangePicker({ from, to }: { from: string; to: string }) {
     router.push(`/dashboard/analytics?from=${rangeFrom}&to=${rangeTo}`);
   }
 
-  const nextMonth = addMonths(view.year, view.month, 1);
+  const secondMonth = addMonths(view.year, view.month, 1);
+  const thirdMonth = addMonths(view.year, view.month, 2);
   const rangeLabel = `${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" }).format(new Date(`${from}T00:00:00+07:00`))} – ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" }).format(new Date(`${to}T00:00:00+07:00`))}`;
 
   return (
@@ -193,19 +183,11 @@ export function DateRangePicker({ from, to }: { from: string; to: string }) {
             right: 0,
             top: "calc(100% + 6px)",
             zIndex: 20,
-            width: 480,
+            width: 700,
             boxShadow: "var(--shadow-pop)",
           }}
         >
           <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--text-muted)" }}>ช่วงที่แสดงอยู่: {rangeLabel}</p>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            {PRESETS.map((p) => (
-              <button key={p.days} className="link-button" onClick={() => apply(isoDaysAgo(p.days), today)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <button className="link-button" onClick={() => setView(addMonths(view.year, view.month, -1))}>
@@ -231,8 +213,18 @@ export function DateRangePicker({ from, to }: { from: string; to: string }) {
               onHover={setHovered}
             />
             <MonthGrid
-              year={nextMonth.year}
-              month={nextMonth.month}
+              year={secondMonth.year}
+              month={secondMonth.month}
+              start={start}
+              end={end}
+              hovered={hovered}
+              today={today}
+              onPick={pick}
+              onHover={setHovered}
+            />
+            <MonthGrid
+              year={thirdMonth.year}
+              month={thirdMonth.month}
               start={start}
               end={end}
               hovered={hovered}
