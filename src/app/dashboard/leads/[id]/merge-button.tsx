@@ -11,9 +11,14 @@ export function MergeButton({ primaryProjectId, duplicateProjectId }: { primaryP
   const [error, setError] = useState<string | null>(null);
 
   async function merge() {
-    const adminPassword = window.prompt(
-      "กรอกรหัสผ่านยืนยันเพื่อรวมงานนี้เข้ากับงานที่กำลังดูอยู่ (บทสนทนาและการแจ้งเตือนจะถูกย้ายมา แล้วงานนี้จะถูกลบ):",
-    );
+    if (
+      !window.confirm(
+        "รวมงานนี้เข้ากับงานที่กำลังดูอยู่? บทสนทนาและการแจ้งเตือนจะถูกย้ายมา แล้วงานนี้จะถูกลบ",
+      )
+    ) {
+      return;
+    }
+    const adminPassword = window.prompt("กรอกรหัสผ่านเพื่อยืนยันการทำรายการ");
     if (adminPassword === null) return; // cancelled
     if (!adminPassword) {
       setError("ต้องกรอกรหัสผ่านยืนยันก่อน");

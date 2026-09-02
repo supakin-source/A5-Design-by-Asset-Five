@@ -1,15 +1,21 @@
-import Link from "next/link";
 import { MessageRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/format";
 import { CategoryBarChart, DailyLineChart, HourlyBarChart, type CategoryDatum } from "@/components/charts";
+import { DateRangePicker } from "./date-range-picker";
 
 export const dynamic = "force-dynamic";
 
 const MAX_CATEGORIES = 10;
-const PERIODS = [7, 30, 90] as const;
-const DEFAULT_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_RANGE_DAYS = 366;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// "Today" and any day-key derived from a stored UTC timestamp are both
+// pinned to Bangkok — the business's day boundary, not the server's or the
+// viewer's.
+function thaiDateKey(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(d);
+}
 
 // Keeps charts readable: the long tail folds into one "อื่น ๆ" bar instead of
 // becoming dozens of one-off rows.
@@ -45,20 +51,32 @@ const SENTIMENT_META: Array<{ key: string; label: string; color: string; icon: s
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; offset?: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const params = await searchParams;
-  const days = PERIODS.includes(Number(params.days) as (typeof PERIODS)[number])
-    ? Number(params.days)
-    : DEFAULT_DAYS;
-  // How many whole windows back from today we are looking — 0 is the window
-  // ending now, 1 the one before it, and so on.
-  const offset = Math.max(0, Math.floor(Number(params.offset) || 0));
+  const today = thaiDateKey(new Date());
 
-  const windowEnd = new Date(Date.now() - offset * days * DAY_MS);
-  const windowStart = new Date(windowEnd.getTime() - days * DAY_MS);
-  const range = { gte: windowStart, lt: windowEnd };
-  const periodLink = (d: number, o: number) => `/dashboard/analytics?days=${d}&offset=${o}`;
+  // Free-form range (calendar picker) instead of a fixed window walked back
+  // by whole periods — any two dates, like a hotel-booking date range.
+  let from = params.from && ISO_DATE.test(params.from) ? params.from : undefined;
+  let to = params.to && ISO_DATE.test(params.to) ? params.to : undefined;
+  if (!from || !to) {
+    to = today;
+    const thirtyAgo = new Date(`${today}T00:00:00+07:00`);
+    thirtyAgo.setUTCDate(thirtyAgo.getUTCDate() - 29);
+    from = thaiDateKey(thirtyAgo);
+  }
+  if (from > to) [from, to] = [to, from];
+  if (to > today) to = today;
+
+  const windowStart = new Date(`${from}T00:00:00+07:00`);
+  const windowEndExclusive = new Date(`${to}T00:00:00+07:00`);
+  windowEndExclusive.setUTCDate(windowEndExclusive.getUTCDate() + 1);
+  if (windowEndExclusive.getTime() - windowStart.getTime() > MAX_RANGE_DAYS * DAY_MS) {
+    windowStart.setTime(windowEndExclusive.getTime() - MAX_RANGE_DAYS * DAY_MS);
+  }
+  const range = { gte: windowStart, lt: windowEndExclusive };
+  const days = Math.round((windowEndExclusive.getTime() - windowStart.getTime()) / DAY_MS);
 
   const [projectTypes, budgets, locations, topicRows, sentimentRows, projectsInWindow, hourRows] = await Promise.all([
     projectFieldDistribution("projectType", range),
@@ -82,7 +100,7 @@ export default async function AnalyticsPage({
       SELECT EXTRACT(HOUR FROM ("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Bangkok')::int AS hour,
              COUNT(*)::bigint AS count
       FROM "Message"
-      WHERE "role" = 'USER'::"MessageRole" AND "createdAt" >= ${windowStart} AND "createdAt" < ${windowEnd}
+      WHERE "role" = 'USER'::"MessageRole" AND "createdAt" >= ${windowStart} AND "createdAt" < ${windowEndExclusive}
       GROUP BY 1
       ORDER BY 1
     `,
@@ -101,45 +119,22 @@ export default async function AnalyticsPage({
   const messagesInWindow = hourly.reduce((sum, h) => sum + h.value, 0);
 
   const dailyCounts = new Map<string, number>();
-  for (let i = days - 1; i >= 0; i--) {
-    const day = new Date(windowEnd.getTime() - i * DAY_MS);
-    dailyCounts.set(day.toISOString().slice(5, 10), 0);
+  for (let i = 0; i < days; i++) {
+    const key = thaiDateKey(new Date(windowStart.getTime() + i * DAY_MS));
+    dailyCounts.set(key, 0);
   }
   for (const project of projectsInWindow) {
-    const key = project.createdAt.toISOString().slice(5, 10);
+    const key = thaiDateKey(project.createdAt);
     if (dailyCounts.has(key)) dailyCounts.set(key, (dailyCounts.get(key) ?? 0) + 1);
   }
-  const daily = [...dailyCounts.entries()].map(([date, value]) => ({ date, value }));
+  const daily = [...dailyCounts.entries()].map(([date, value]) => ({ date: date.slice(5), value }));
 
   return (
     <>
-      <h1 style={{ marginTop: 0 }}>Market data</h1>
-      <p style={{ color: "var(--text-muted)", marginTop: -8 }}>
-        สรุปจากบทสนทนาใน LINE OA เพื่อใช้วางแผนบริการและการตลาด
-      </p>
+      <h1 style={{ marginTop: 0 }}>Market Data</h1>
 
-      {/* Period controls: length on the left, move the window on the right. */}
-      <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 16 }}>
-        <div className="segmented">
-          {PERIODS.map((d) => (
-            <Link key={d} href={periodLink(d, 0)} aria-current={d === days ? "true" : undefined}>
-              {d} วัน
-            </Link>
-          ))}
-        </div>
-        <div className="toolbar">
-          <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            {formatDate(windowStart)} – {formatDate(windowEnd)}
-          </span>
-          <div className="segmented">
-            <Link href={periodLink(days, offset + 1)}>◀ ก่อนหน้า</Link>
-            {offset > 0 ? (
-              <Link href={periodLink(days, offset - 1)}>ถัดไป ▶</Link>
-            ) : (
-              <span style={{ padding: "5px 14px", fontSize: 12, color: "var(--text-muted)" }}>ถัดไป ▶</span>
-            )}
-          </div>
-        </div>
+      <div className="toolbar" style={{ justifyContent: "flex-end", marginBottom: 16 }}>
+        <DateRangePicker from={from} to={to} />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>

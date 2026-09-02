@@ -46,7 +46,7 @@ export function EditProject({ project }: { project: EditableProject }) {
   }
 
   async function save() {
-    const adminPassword = window.prompt("กรอกรหัสผ่านยืนยันการบันทึกข้อมูล:");
+    const adminPassword = window.prompt("กรอกรหัสผ่านเพื่อยืนยันการทำรายการ");
     if (adminPassword === null) return; // cancelled
     if (!adminPassword) {
       setError("ต้องกรอกรหัสผ่านยืนยันก่อน");
@@ -72,9 +72,8 @@ export function EditProject({ project }: { project: EditableProject }) {
   }
 
   async function remove() {
-    const adminPassword = window.prompt(
-      'พิมพ์รหัสผ่านยืนยันเพื่อ "ลบงานนี้ถาวร" — บทสนทนาและการแจ้งเตือนทั้งหมดจะถูกลบไปด้วย กู้คืนไม่ได้:',
-    );
+    if (!window.confirm("ลบงานนี้ถาวร? บทสนทนาและการแจ้งเตือนทั้งหมดจะถูกลบไปด้วย กู้คืนไม่ได้")) return;
+    const adminPassword = window.prompt("กรอกรหัสผ่านเพื่อยืนยันการทำรายการ");
     if (adminPassword === null) return; // cancelled
     if (!adminPassword) {
       setError("ต้องกรอกรหัสผ่านยืนยันก่อน");

@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <nav className="nav">
             <Link href="/dashboard">ภาพรวม</Link>
             <Link href="/dashboard/leads">รายการงาน</Link>
-            <Link href="/dashboard/analytics">Market data</Link>
+            <Link href="/dashboard/analytics">Market Data</Link>
             <Link href="/dashboard/audit-log">ประวัติการแก้ไข</Link>
           </nav>
         </div>
