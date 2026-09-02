@@ -133,73 +133,8 @@ export default async function AnalyticsPage({
     <>
       <h1 style={{ marginTop: 0 }}>Market Data</h1>
 
-      <div className="toolbar" style={{ justifyContent: "flex-end", marginBottom: 16 }}>
-        <DateRangePicker from={from} to={to} />
-      </div>
-
       <div className="card" style={{ marginBottom: 16 }}>
-        <h2>ช่วงเวลาที่ลูกค้าทักเข้ามามากที่สุด</h2>
-        <p className="sub">ใช้จัดเวรทีมงานให้ตรงกับช่วงที่ลูกค้าทักจริง</p>
-        {messagesInWindow === 0 ? (
-          <p className="empty">ยังไม่มีข้อความในช่วงนี้</p>
-        ) : (
-          <div className="grid kpi">
-            <div>
-              <div className="kpi-value">
-                {String(busiest.hour).padStart(2, "0")}:00–{String((busiest.hour + 1) % 24).padStart(2, "0")}:00
-              </div>
-              <div className="kpi-label">ช่วงที่ทักมามากที่สุด ({busiest.value} ข้อความ)</div>
-            </div>
-            <div>
-              <div className="kpi-value">{messagesInWindow}</div>
-              <div className="kpi-label">ข้อความจากลูกค้าทั้งช่วง</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid" style={{ gap: 16 }}>
-        <HourlyBarChart
-          title="ข้อความจากลูกค้าตามช่วงเวลาของวัน"
-          subtitle="รวมทุกวันในช่วงที่เลือก · เวลาไทย"
-          data={hourly}
-          valueLabel="ข้อความ"
-        />
-        <DailyLineChart
-          title="งานที่ติดต่อเข้ามาต่อวัน"
-          subtitle="ใช้ดูจังหวะการเข้ามาของลูกค้า เทียบกับช่วงที่ทำการตลาด"
-          data={daily}
-          valueLabel="งาน"
-        />
-        <CategoryBarChart
-          title="ประเภทงานที่ลูกค้าสนใจ"
-          subtitle="นับจากงานที่ระบุประเภทได้"
-          data={projectTypes}
-          valueLabel="จำนวนงาน"
-        />
-        <CategoryBarChart
-          title="หัวข้อที่ลูกค้าถามบ่อย"
-          subtitle="ใช้หาช่องว่างของข้อมูลที่ควรเพิ่มในสื่อการตลาดหรือฐานความรู้ของบอท"
-          data={topics}
-          valueLabel="ข้อความ"
-        />
-        <CategoryBarChart
-          title="ช่วงงบประมาณที่ลูกค้าแจ้ง"
-          subtitle="จากที่ลูกค้าแจ้งเองเท่านั้น — บอทไม่เสนอราคา"
-          data={budgets}
-          valueLabel="จำนวนงาน"
-        />
-        <CategoryBarChart
-          title="พื้นที่/ทำเลของงาน"
-          subtitle="ใช้วางแผนพื้นที่ให้บริการและการตลาดเชิงพื้นที่"
-          data={locations}
-          valueLabel="จำนวนงาน"
-        />
-      </div>
-
-      <div className="card" style={{ marginTop: 16 }}>
         <h2>ความรู้สึกของลูกค้าในบทสนทนา</h2>
-        <p className="sub">จาก {sentimentTotal} ข้อความ · ใช้ดูสัญญาณความไม่พอใจที่ควรรีบตามงาน</p>
         {sentimentTotal === 0 ? (
           <p className="empty">ยังไม่มีข้อมูลในช่วงนี้</p>
         ) : (
@@ -219,6 +154,40 @@ export default async function AnalyticsPage({
             })}
           </div>
         )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>ช่วงเวลาที่ลูกค้าทักเข้ามามากที่สุด</h2>
+        {messagesInWindow === 0 ? (
+          <p className="empty">ยังไม่มีข้อความในช่วงนี้</p>
+        ) : (
+          <div className="grid kpi">
+            <div>
+              <div className="kpi-value">
+                {String(busiest.hour).padStart(2, "0")}:00–{String((busiest.hour + 1) % 24).padStart(2, "0")}:00
+              </div>
+              <div className="kpi-label">ช่วงที่ทักมามากที่สุด ({busiest.value} ข้อความ)</div>
+            </div>
+            <div>
+              <div className="kpi-value">{messagesInWindow}</div>
+              <div className="kpi-label">ข้อความจากลูกค้าทั้งช่วง</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid" style={{ gap: 16 }}>
+        <HourlyBarChart title="ข้อความจากลูกค้าตามช่วงเวลาของวัน" data={hourly} valueLabel="ข้อความ" />
+        <DailyLineChart
+          title="งานที่ติดต่อเข้ามาต่อวัน"
+          data={daily}
+          valueLabel="งาน"
+          headerExtra={<DateRangePicker from={from} to={to} />}
+        />
+        <CategoryBarChart title="ประเภทงานที่ลูกค้าสนใจ" data={projectTypes} valueLabel="จำนวนงาน" />
+        <CategoryBarChart title="หัวข้อที่ลูกค้าถามบ่อย" data={topics} valueLabel="ข้อความ" />
+        <CategoryBarChart title="ช่วงงบประมาณที่ลูกค้าแจ้ง" data={budgets} valueLabel="จำนวนงาน" />
+        <CategoryBarChart title="พื้นที่/ทำเลของงาน" data={locations} valueLabel="จำนวนงาน" />
       </div>
     </>
   );

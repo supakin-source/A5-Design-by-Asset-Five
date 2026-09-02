@@ -7,14 +7,12 @@ import { StatusActions } from "./status-actions";
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
   // "ลูกค้า" counts unique customers (Lead); status counts and the recent
   // activity table are per job (Project) — a returning customer's second
   // inquiry is a separate row there, not a repeat of the first.
-  const [customers, newCustomers, totalJobs, handedOff, waitingCallback, recentProjects] = await Promise.all([
+  const [customers, contactedBack, totalJobs, handedOff, waitingCallback, recentProjects] = await Promise.all([
     prisma.lead.count(),
-    prisma.lead.count({ where: { createdAt: { gte: since } } }),
+    prisma.project.count({ where: { status: ProjectStatus.CONTACTED } }),
     prisma.project.count(),
     prisma.project.count({
       where: { status: { in: [ProjectStatus.HANDED_OFF, ProjectStatus.CONTACTED, ProjectStatus.CLOSED] } },
@@ -35,8 +33,8 @@ export default async function OverviewPage() {
           <div className="kpi-label">รอติดต่อกลับ</div>
         </div>
         <div className="card">
-          <div className="kpi-value">{newCustomers}</div>
-          <div className="kpi-label">ลูกค้าใหม่ใน 7 วัน</div>
+          <div className="kpi-value">{contactedBack}</div>
+          <div className="kpi-label">ติดต่อกลับแล้ว</div>
         </div>
         <div className="card">
           <div className="kpi-value">{customers}</div>

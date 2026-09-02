@@ -32,15 +32,15 @@ const TOOLTIP_STYLE = {
 
 function ChartCard({
   title,
-  subtitle,
   columns,
   rows,
+  headerExtra,
   children,
 }: {
   title: string;
-  subtitle: string;
   columns: [string, string];
   rows: Array<[string, number]>;
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [showTable, setShowTable] = useState(false);
@@ -48,13 +48,13 @@ function ChartCard({
   return (
     <div className="card">
       <div className="card-head">
-        <div>
-          <h2>{title}</h2>
-          <p className="sub">{subtitle}</p>
+        <h2>{title}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {headerExtra}
+          <button className="link-button" onClick={() => setShowTable((v) => !v)}>
+            {showTable ? "ดูเป็นกราฟ" : "ดูเป็นตาราง"}
+          </button>
         </div>
-        <button className="link-button" onClick={() => setShowTable((v) => !v)}>
-          {showTable ? "ดูเป็นกราฟ" : "ดูเป็นตาราง"}
-        </button>
       </div>
 
       {rows.length === 0 ? (
@@ -87,24 +87,17 @@ function ChartCard({
 
 export function CategoryBarChart({
   title,
-  subtitle,
   data,
   valueLabel = "จำนวน",
 }: {
   title: string;
-  subtitle: string;
   data: CategoryDatum[];
   valueLabel?: string;
 }) {
   const sorted = [...data].sort((a, b) => b.value - a.value);
 
   return (
-    <ChartCard
-      title={title}
-      subtitle={subtitle}
-      columns={["หมวด", valueLabel]}
-      rows={sorted.map((d) => [d.label, d.value])}
-    >
+    <ChartCard title={title} columns={["หมวด", valueLabel]} rows={sorted.map((d) => [d.label, d.value])}>
       <ResponsiveContainer width="100%" height={Math.max(160, sorted.length * 38 + 24)}>
         <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 32, bottom: 4, left: 4 }}>
           <CartesianGrid horizontal={false} stroke="var(--grid)" />
@@ -129,12 +122,10 @@ export function CategoryBarChart({
 // and the rest is available on hover or in the table view.
 export function HourlyBarChart({
   title,
-  subtitle,
   data,
   valueLabel = "ข้อความ",
 }: {
   title: string;
-  subtitle: string;
   data: Array<{ hour: number; value: number }>;
   valueLabel?: string;
 }) {
@@ -142,7 +133,7 @@ export function HourlyBarChart({
   const plot = data.map((d) => ({ ...d, label: `${String(d.hour).padStart(2, "0")}` }));
 
   return (
-    <ChartCard title={title} subtitle={subtitle} columns={["ช่วงเวลา", valueLabel]} rows={rows}>
+    <ChartCard title={title} columns={["ช่วงเวลา", valueLabel]} rows={rows}>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={plot} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
           <CartesianGrid vertical={false} stroke="var(--grid)" />
@@ -163,21 +154,21 @@ export function HourlyBarChart({
 
 export function DailyLineChart({
   title,
-  subtitle,
   data,
   valueLabel = "ลูกค้าใหม่",
+  headerExtra,
 }: {
   title: string;
-  subtitle: string;
   data: Array<{ date: string; value: number }>;
   valueLabel?: string;
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <ChartCard
       title={title}
-      subtitle={subtitle}
       columns={["วันที่", valueLabel]}
       rows={data.map((d) => [d.date, d.value])}
+      headerExtra={headerExtra}
     >
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
