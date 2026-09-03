@@ -23,7 +23,7 @@ const GREETING = [
 interface LineEvent {
   type: string;
   replyToken?: string;
-  source?: { userId?: string };
+  source?: { userId?: string; groupId?: string; roomId?: string };
   message?: { type: string; id: string; text?: string };
 }
 
@@ -51,6 +51,16 @@ export async function POST(req: Request) {
 }
 
 async function handleEvent(event: LineEvent) {
+  // This is how staff find LINE_STAFF_NOTIFY_ID: invite the OA into the
+  // staff group, send one message, then read this line in Vercel → Logs.
+  if (event.source?.groupId || event.source?.roomId) {
+    console.log("[line-webhook] group/room event", {
+      type: event.type,
+      groupId: event.source.groupId,
+      roomId: event.source.roomId,
+    });
+  }
+
   const userId = event.source?.userId;
   if (!userId) return;
 
