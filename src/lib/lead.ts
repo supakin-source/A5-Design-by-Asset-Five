@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import type { StructuredChatReply } from "./gemini";
 import { ProjectStatus, type Lead, type Project } from "@prisma/client";
+import { formatDate } from "./format";
 
 // A project counts as settled once it has left staff's inbox.
 const SETTLED_STATUSES: ProjectStatus[] = [ProjectStatus.HANDED_OFF, ProjectStatus.CONTACTED, ProjectStatus.CLOSED];
@@ -73,18 +74,39 @@ export async function getPriorSettledProjects(leadId: string, excludeProjectId: 
   });
 }
 
+// "ทีมงานยังไม่ได้ติดต่อกลับ" / "ทีมงานติดต่อไปแล้ว (วันที่)" — the phrasing the
+// model is told to answer with directly when a customer complains about a
+// callback, instead of asking the generic "is this old or new" question
+// while blind to whether staff actually pressed "ติดต่อแล้ว" yet.
+function formatCallbackStatus(project: Project): string {
+  if (project.status === ProjectStatus.HANDED_OFF) return "ทีมงานยังไม่ได้ติดต่อกลับ";
+  if (project.status === ProjectStatus.CONTACTED) return `ทีมงานติดต่อไปแล้ว (${formatDate(project.updatedAt)})`;
+  return "ปิดงานแล้ว";
+}
+
 export function formatPriorProjectsNote(projects: Project[]): string | undefined {
   if (projects.length === 0) return undefined;
   const lines = projects.map((p, i) => {
     const parts = [p.projectType, p.projectDetail, p.location].filter(Boolean).join(" / ");
-    return `- งานก่อนหน้าที่ ${i + 1}: ${parts || "(ไม่มีรายละเอียด)"}`;
+    return `- งานก่อนหน้าที่ ${i + 1}: ${parts || "(ไม่มีรายละเอียด)"} — สถานะ: ${formatCallbackStatus(p)}`;
   });
   return [
     "ลูกค้ารายนี้มีงานเดิมที่เคยติดต่อไว้แล้ว (ดูรายการด้านล่าง) และตอนนี้ทักมาใหม่ในรอบนี้:",
     ...lines,
-    "ก่อนเก็บข้อมูลใหม่ ให้ถามยืนยันสั้น ๆ ก่อนว่าเรื่องที่ติดต่อเข้ามาครั้งนี้เกี่ยวกับงานเดิมข้างต้น",
-    "หรือเป็นงานใหม่ ถ้าลูกค้าบอกว่าเป็นเรื่องเดียวกับงานเดิม ให้ส่งต่อทีมงานทันที (needsHuman = true)",
-    "ไม่ต้องถามเก็บข้อมูลซ้ำใหม่ทั้งหมด ถ้าเป็นงานใหม่ ให้เก็บข้อมูลตามปกติ",
+    "",
+    "ถ้าข้อความล่าสุดของลูกค้าเป็นการถามหรือร้องเรียนเรื่องการติดต่อกลับ (เช่น \"ไหน",
+    "พนักงานติดต่อกลับ\" \"ทำไมยังไม่มีคนติดต่อมา\") ให้ตอบตามสถานะจริงของงานนั้น",
+    "ข้างต้นทันที ไม่ต้องถามยืนยันเรื่องเดิม/เรื่องใหม่ก่อน:",
+    "- สถานะ \"ทีมงานยังไม่ได้ติดต่อกลับ\": ขอโทษที่ทำให้รอ แจ้งว่าจะเร่งประสานให้",
+    "  ทีมงานติดต่อกลับโดยเร็วที่สุด แล้วส่งต่อทีมงานทันที (needsHuman = true)",
+    "- สถานะ \"ทีมงานติดต่อไปแล้ว (วันที่)\": แจ้งวันที่ทีมงานติดต่อไปแล้วตามข้อมูล",
+    "  ข้างต้น ถ้าลูกค้าบอกว่ายังไม่ได้รับการติดต่อจริง ให้ขอโทษและส่งต่อทีมงานอีกครั้ง",
+    "  (needsHuman = true)",
+    "",
+    "ถ้าข้อความล่าสุดไม่ได้ถามเรื่องการติดต่อกลับ ให้ถามยืนยันสั้น ๆ ก่อนว่าเรื่องที่",
+    "ติดต่อเข้ามาครั้งนี้เกี่ยวกับงานเดิมข้างต้นหรือเป็นงานใหม่ ถ้าลูกค้าบอกว่าเป็นเรื่อง",
+    "เดียวกับงานเดิม ให้ส่งต่อทีมงานทันที (needsHuman = true) ไม่ต้องถามเก็บข้อมูลซ้ำใหม่",
+    "ทั้งหมด ถ้าเป็นงานใหม่ ให้เก็บข้อมูลตามปกติ",
   ].join("\n");
 }
 
@@ -115,11 +137,23 @@ export async function applyExtractedFields(
   return { lead, project };
 }
 
-// A project is "ready" for staff follow-up once we have a way to reach the
-// customer and know roughly what they want — matches the handoff rule in
-// docs/AI_POLICY.md.
-export function hasEnoughInfoForHandoff(project: { phone: string | null; projectType: string | null }): boolean {
-  return Boolean(project.phone && project.projectType);
+// A project is "ready" for staff follow-up once the job is actually
+// summarizable — a way to reach the customer plus what they want, roughly
+// how much, and where — not just contact + project type. Notifying staff
+// the moment those first two fields land means the group message staff get
+// is mostly "(ไม่ระบุ)" for everything else, which happened for real (see
+// docs/AI_POLICY.md). This is a backup gate: the model itself is also told
+// (buildSystemPrompt, item 8) not to set needsHuman=true this early, but a
+// genuine "ลูกค้าขอคุยกับคนจริง" / complaint / out-of-scope question still
+// hands off immediately regardless of this check — see the `ai.needsHuman
+// || hasEnoughInfoForHandoff(...)` call in src/lib/inbox.ts.
+export function hasEnoughInfoForHandoff(project: {
+  phone: string | null;
+  projectType: string | null;
+  budgetRange: string | null;
+  location: string | null;
+}): boolean {
+  return Boolean(project.phone && project.projectType && project.budgetRange && project.location);
 }
 
 export async function markHandedOff(projectId: string) {

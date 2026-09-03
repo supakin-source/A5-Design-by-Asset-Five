@@ -54,11 +54,30 @@ test("formatPriorProjectsNote is undefined with no prior settled projects", () =
 
 test("formatPriorProjectsNote lists each prior project and tells the model to confirm before re-collecting", () => {
   const note = formatPriorProjectsNote([
-    { ...BASE_PROJECT, id: "p0", projectType: "ต่อเติม", projectDetail: "ต่อเติมครัวหลังบ้าน", location: "นนทบุรี" },
+    {
+      ...BASE_PROJECT,
+      id: "p0",
+      status: ProjectStatus.HANDED_OFF,
+      projectType: "ต่อเติม",
+      projectDetail: "ต่อเติมครัวหลังบ้าน",
+      location: "นนทบุรี",
+    },
   ]);
   assert.match(note!, /ต่อเติม \/ ต่อเติมครัวหลังบ้าน \/ นนทบุรี/);
   assert.match(note!, /ถามยืนยัน/);
   assert.match(note!, /needsHuman = true/);
+});
+
+test("formatPriorProjectsNote tells the model to answer a callback complaint from the real status, not by asking old-vs-new", () => {
+  const notYetContacted = formatPriorProjectsNote([
+    { ...BASE_PROJECT, id: "p0", status: ProjectStatus.HANDED_OFF, projectType: "สร้างบ้านใหม่" },
+  ]);
+  assert.match(notYetContacted!, /ทีมงานยังไม่ได้ติดต่อกลับ/);
+
+  const alreadyContacted = formatPriorProjectsNote([
+    { ...BASE_PROJECT, id: "p0", status: ProjectStatus.CONTACTED, projectType: "สร้างบ้านใหม่" },
+  ]);
+  assert.match(alreadyContacted!, /ทีมงานติดต่อไปแล้ว/);
 });
 
 test("a closed job reopens as a new project immediately; the rest wait out the gap", () => {
@@ -80,9 +99,12 @@ test("a closed job reopens as a new project immediately; the rest wait out the g
   assert.equal(startsNewProject(ProjectStatus.NEW, twoHours), false);
 });
 
-test("hasEnoughInfoForHandoff needs both a phone and a project type", () => {
-  assert.equal(hasEnoughInfoForHandoff({ phone: null, projectType: null }), false);
-  assert.equal(hasEnoughInfoForHandoff({ phone: "081-234-5678", projectType: null }), false);
-  assert.equal(hasEnoughInfoForHandoff({ phone: null, projectType: "ต่อเติม" }), false);
-  assert.equal(hasEnoughInfoForHandoff({ phone: "081-234-5678", projectType: "ต่อเติม" }), true);
+test("hasEnoughInfoForHandoff needs contact, project type, budget, and location — not just the first two", () => {
+  const FULL = { phone: "081-234-5678", projectType: "ต่อเติม", budgetRange: "1-3 ล้าน", location: "กรุงเทพฯ" };
+  assert.equal(hasEnoughInfoForHandoff({ phone: null, projectType: null, budgetRange: null, location: null }), false);
+  // Contact + project type alone used to be enough — this is exactly the bug
+  // that fired a staff notification full of "(ไม่ระบุ)" for everything else.
+  assert.equal(hasEnoughInfoForHandoff({ ...FULL, budgetRange: null, location: null }), false);
+  assert.equal(hasEnoughInfoForHandoff({ ...FULL, location: null }), false);
+  assert.equal(hasEnoughInfoForHandoff(FULL), true);
 });
