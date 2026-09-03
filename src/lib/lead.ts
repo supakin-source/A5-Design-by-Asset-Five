@@ -138,22 +138,32 @@ export async function applyExtractedFields(
 }
 
 // A project is "ready" for staff follow-up once the job is actually
-// summarizable — a way to reach the customer plus what they want, roughly
-// how much, and where — not just contact + project type. Notifying staff
-// the moment those first two fields land means the group message staff get
-// is mostly "(ไม่ระบุ)" for everything else, which happened for real (see
-// docs/AI_POLICY.md). This is a backup gate: the model itself is also told
-// (buildSystemPrompt, item 8) not to set needsHuman=true this early, but a
-// genuine "ลูกค้าขอคุยกับคนจริง" / complaint / out-of-scope question still
-// hands off immediately regardless of this check — see the `ai.needsHuman
-// || hasEnoughInfoForHandoff(...)` call in src/lib/inbox.ts.
+// summarizable — a way to reach the customer, what they want, and at least
+// one substantive detail about the job — not just contact + project type
+// with nothing else. Notifying staff the moment those first two fields land
+// means the group message is mostly "(ไม่ระบุ)" for everything else, which
+// happened for real (see docs/AI_POLICY.md). Requiring ALL of budget,
+// location AND a description was tried and over-corrected: a real customer
+// who gave a full project description and a budget, but never named an
+// area (e.g. redecorating a specific condo unit — there's no "location" to
+// give beyond the unit itself), got stuck with no notification at all even
+// though staff had plenty to act on. So this only requires *one* of those
+// three — enough for the message to read as a real job, not a guarantee
+// every field is filled. This is a backup gate: the model itself is also
+// told (buildSystemPrompt, item 8) not to set needsHuman=true this early,
+// but a genuine "ลูกค้าขอคุยกับคนจริง" / complaint / out-of-scope question
+// still hands off immediately regardless of this check — see the
+// `ai.needsHuman || hasEnoughInfoForHandoff(...)` call in src/lib/inbox.ts.
 export function hasEnoughInfoForHandoff(project: {
   phone: string | null;
   projectType: string | null;
+  projectDetail: string | null;
   budgetRange: string | null;
   location: string | null;
 }): boolean {
-  return Boolean(project.phone && project.projectType && project.budgetRange && project.location);
+  return Boolean(
+    project.phone && project.projectType && (project.projectDetail || project.budgetRange || project.location),
+  );
 }
 
 export async function markHandedOff(projectId: string) {

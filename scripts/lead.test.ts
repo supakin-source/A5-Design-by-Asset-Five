@@ -99,12 +99,22 @@ test("a closed job reopens as a new project immediately; the rest wait out the g
   assert.equal(startsNewProject(ProjectStatus.NEW, twoHours), false);
 });
 
-test("hasEnoughInfoForHandoff needs contact, project type, budget, and location — not just the first two", () => {
-  const FULL = { phone: "081-234-5678", projectType: "ต่อเติม", budgetRange: "1-3 ล้าน", location: "กรุงเทพฯ" };
-  assert.equal(hasEnoughInfoForHandoff({ phone: null, projectType: null, budgetRange: null, location: null }), false);
+test("hasEnoughInfoForHandoff needs contact + project type + at least one substantive detail", () => {
+  const BASE = {
+    phone: "081-234-5678",
+    projectType: "ต่อเติม",
+    projectDetail: null as string | null,
+    budgetRange: null as string | null,
+    location: null as string | null,
+  };
   // Contact + project type alone used to be enough — this is exactly the bug
   // that fired a staff notification full of "(ไม่ระบุ)" for everything else.
-  assert.equal(hasEnoughInfoForHandoff({ ...FULL, budgetRange: null, location: null }), false);
-  assert.equal(hasEnoughInfoForHandoff({ ...FULL, location: null }), false);
-  assert.equal(hasEnoughInfoForHandoff(FULL), true);
+  assert.equal(hasEnoughInfoForHandoff(BASE), false);
+  assert.equal(hasEnoughInfoForHandoff({ phone: null, projectType: null, projectDetail: null, budgetRange: null, location: null }), false);
+  // Any single substantive field is enough — requiring all three over-corrected:
+  // a customer redecorating a specific condo unit has no "location" to give
+  // beyond the unit itself, and got no notification at all under that rule.
+  assert.equal(hasEnoughInfoForHandoff({ ...BASE, budgetRange: "1-3 ล้าน" }), true);
+  assert.equal(hasEnoughInfoForHandoff({ ...BASE, location: "กรุงเทพฯ" }), true);
+  assert.equal(hasEnoughInfoForHandoff({ ...BASE, projectDetail: "ตกแต่งภายในคอนโด" }), true);
 });
