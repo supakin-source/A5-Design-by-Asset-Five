@@ -3,6 +3,7 @@ import { verifyLineSignature, replyMessage, getLineProfile } from "@/lib/line";
 import { getOrCreateLeadAndConversation } from "@/lib/lead";
 import { enqueueMessage, processAfterDebounce } from "@/lib/inbox";
 import { PERSONA } from "@/lib/policy";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -51,13 +52,23 @@ export async function POST(req: Request) {
 }
 
 async function handleEvent(event: LineEvent) {
-  // This is how staff find LINE_STAFF_NOTIFY_ID: invite the OA into the
-  // staff group, send one message, then read this line in Vercel → Logs.
-  if (event.source?.groupId || event.source?.roomId) {
+  // This is how staff find LINE_STAFF_NOTIFY_ID before it's set: invite the
+  // OA into the staff group, send one message, then check the dashboard's
+  // ภาพรวม page — it surfaces this once, from here, instead of a Vercel log
+  // hunt. Once the env var is set this stops writing (nothing left to find).
+  const groupOrRoomId = event.source?.groupId ?? event.source?.roomId;
+  if (groupOrRoomId && !process.env.LINE_STAFF_NOTIFY_ID) {
     console.log("[line-webhook] group/room event", {
       type: event.type,
-      groupId: event.source.groupId,
-      roomId: event.source.roomId,
+      groupId: event.source?.groupId,
+      roomId: event.source?.roomId,
+    });
+    await logAudit({
+      username: "system",
+      action: "system",
+      targetType: "LineGroup",
+      targetId: groupOrRoomId,
+      detail: `บอทได้รับข้อความจาก${event.source?.groupId ? "กลุ่ม" : "ห้องแชท"}ไลน์นี้ — นำไปตั้งเป็น LINE_STAFF_NOTIFY_ID ใน Vercel`,
     });
   }
 

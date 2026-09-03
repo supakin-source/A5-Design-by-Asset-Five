@@ -5,8 +5,8 @@ import { prisma } from "./db";
 // here so the business can check "which login touched this, and when".
 export async function logAudit(params: {
   username: string;
-  action: "update" | "delete" | "merge" | "status";
-  targetType: "Project";
+  action: "update" | "delete" | "merge" | "status" | "system";
+  targetType: "Project" | "LineGroup";
   targetId: string;
   detail: string;
 }): Promise<void> {

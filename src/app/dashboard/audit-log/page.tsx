@@ -9,6 +9,7 @@ const ACTION_LABEL: Record<string, string> = {
   delete: "ลบ",
   merge: "รวมงาน",
   status: "เปลี่ยนสถานะ",
+  system: "ระบบ",
 };
 
 export default async function AuditLogPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
@@ -79,8 +80,10 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
                             {target.lead.displayName ?? "ไม่ระบุชื่อ"}
                             {target.projectType ? ` · ${target.projectType}` : ""}
                           </Link>
-                        ) : (
+                        ) : entry.targetType === "Project" ? (
                           <span style={{ color: "var(--text-muted)" }}>ลบ/รวมไปแล้ว</span>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)" }}>—</span>
                         )}
                       </td>
                       <td style={{ whiteSpace: "normal", maxWidth: 460 }}>{entry.detail}</td>

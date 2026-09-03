@@ -23,9 +23,36 @@ export default async function OverviewPage() {
 
   const handoffRate = totalJobs > 0 ? Math.round((handedOff / totalJobs) * 100) : 0;
 
+  // Surfaces the group/room id the LINE webhook has seen while
+  // LINE_STAFF_NOTIFY_ID is still unset, so setting it up doesn't require
+  // digging through Vercel's function logs — see src/app/api/line/webhook.
+  const lineGroupHint = process.env.LINE_STAFF_NOTIFY_ID
+    ? null
+    : await prisma.auditLog.findFirst({ where: { targetType: "LineGroup" }, orderBy: { createdAt: "desc" } });
+
   return (
     <>
       <h1 style={{ marginTop: 0 }}>ภาพรวม</h1>
+
+      {lineGroupHint && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 16,
+            border: "1px solid var(--status-warning)",
+            background: "var(--status-warning-soft)",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>ยังไม่ได้ตั้งค่าส่งแจ้งเตือนเข้ากลุ่มไลน์</h2>
+          <p className="sub" style={{ marginBottom: 8 }}>
+            บอทได้รับข้อความจากกลุ่ม/ห้องไลน์นี้ล่าสุดเมื่อ {formatDateTime(lineGroupHint.createdAt)} — นำ ID
+            ด้านล่างไปตั้งเป็น environment variable ชื่อ <code>LINE_STAFF_NOTIFY_ID</code> ใน Vercel แล้ว redeploy
+          </p>
+          <p style={{ fontFamily: "monospace", fontSize: 14, margin: 0, wordBreak: "break-all" }}>
+            {lineGroupHint.targetId}
+          </p>
+        </div>
+      )}
 
       <div className="grid kpi" style={{ marginBottom: 24 }}>
         <div className="card">
